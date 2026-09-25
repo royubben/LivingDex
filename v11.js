@@ -86,29 +86,61 @@
   function openFilterModal(){addAdvancedFilterUI();syncFilterForm();$('#advancedFilterOverlay').hidden=false;$('#advancedFilterModal').hidden=false;document.body.classList.add('modal-open');}
   function closeFilterModal(){if($('#advancedFilterOverlay'))$('#advancedFilterOverlay').hidden=true;if($('#advancedFilterModal'))$('#advancedFilterModal').hidden=true;document.body.classList.remove('modal-open');}
 
-  // Rich Pokémon detail view.
+  // Rich Pokémon detail view — V1.1 BETA 4.
   window.openInfo = function(id){
     const e=entries.find(x=>x.id===id); if(!e)return;
-    const sp=speciesForEntry(e); if(!sp){ $('#infoContent').innerHTML=`<div class="info-error">${T('noInfo')}</div>`; }
-    else {
-      const all=mainEntries(); const idx=all.findIndex(x=>x.id===e.id); const prev=all[(idx-1+all.length)%all.length], next=all[(idx+1)%all.length];
-      const types=entryTypes(e); const caught=!!state[e.id], fav=!!favorites[e.id];
+    const sp=speciesForEntry(e);
+    if(!sp){
+      $('#infoContent').innerHTML=`<div class="info-error">${T('noInfo')}</div>`;
+    } else {
+      // Navigate inside the collection the Pokémon was opened from.
+      const collection=pageEntries(tab);
+      const all=collection.length?collection:mainEntries();
+      const idx=Math.max(0,all.findIndex(x=>x.id===e.id));
+      const prev=all.length>1?all[(idx-1+all.length)%all.length]:null;
+      const next=all.length>1?all[(idx+1)%all.length]:null;
+      const types=entryTypes(e);
+      const caught=!!state[e.id], fav=!!favorites[e.id];
+      const variants=entries.filter(x=>Number(x.dex)===Number(e.dex)&&x.id!==e.id).sort(sortEntry);
+      const gen=genFor(e);
+      const location=e.box?`Box ${e.box} · slot ${e.slot||'—'}`:'Special collection';
+      const collectionLabel=e.box?'Main LivingDex':(tab==='main'?'LivingDex':(DATA.pages?.[tab]?.title||tab||'Special collection'));
+      const formsHtml=variants.length?`
+        <div class="info-section"><div class="section-heading detail-section-heading"><div><span class="eyebrow">FORMS & VARIANTS</span><h3>Other entries for #${String(e.dex).padStart(3,'0')}</h3></div><span class="section-note">${variants.length} other ${variants.length===1?'entry':'entries'}</span></div>
+        <div class="detail-forms">${variants.map(v=>`<button class="detail-form-card" data-detail-form="${escHtml(v.id)}"><img src="${spritePath(v)}" alt="${escHtml(v.name)}"><span><b>${escHtml(v.name)}</b><small>${escHtml(v.form||'Base form')}</small></span></button>`).join('')}</div>
+      </div>`:'';
+      const navHtml=all.length>1?`<div class="detail-nav"><button id="detailPrev">← Previous</button><span>${idx+1} / ${all.length}</span><button id="detailNext">Next →</button></div>`:'';
       $('#infoContent').innerHTML=`<div class="detail-hero">
         <div class="detail-art"><img src="${spritePath(e)}" alt="${escHtml(e.name)}"></div>
-        <div class="detail-main"><div class="eyebrow">POKÉDEX #${String(e.dex).padStart(3,'0')}</div><h2>${escHtml(e.name)}</h2>${e.form?`<p class="detail-form">${escHtml(e.form)}</p>`:''}<div class="types detail-types">${types.map(t=>`<span class="type" style="${typeStyle(t)}">${escHtml(typeLabel(t))}</span>`).join('')}</div>
-        <div class="detail-actions"><button id="detailCaught" class="${caught?'primary':'secondary'}">${caught?'✓ Caught':'Mark caught'}</button><button id="detailFav" class="secondary">${fav?'★ Favorite':'☆ Favorite'}</button></div></div></div>
-        <div class="detail-nav"><button id="detailPrev">← Previous</button><span>${idx+1} / ${all.length}</span><button id="detailNext">Next →</button></div>
-        <div class="info-section"><h3>Basic information</h3><div class="info-grid"><div class="info-item"><b>Generation</b><span>${genFor(e)||'—'}</span></div><div class="info-item"><b>Height</b><span>${sp.height!=null?(Number(sp.height)/10).toFixed(1)+' m':'—'}</span></div><div class="info-item"><b>Weight</b><span>${sp.weight!=null?(Number(sp.weight)/10).toFixed(1)+' kg':'—'}</span></div><div class="info-item"><b>Abilities</b><span>${escHtml((sp.abilities||[]).join(', ')||'—')}</span></div><div class="info-item"><b>Box</b><span>${e.box?`Box ${e.box}`:'Special collection'}</span></div><div class="info-item"><b>Favorite</b><span>${fav?'Yes':'No'}</span></div></div></div>
-        <div class="info-section"><h3>Evolution line</h3>${evoHtml(e)}</div>
-        <div class="info-tabs"><button class="info-tab active" data-panel="stats">Base stats</button><button class="info-tab" data-panel="spawn">Spawn</button><button class="info-tab" data-panel="breeding">Breeding</button><button class="info-tab" data-panel="notes">My note</button></div>
-        <div class="info-panel active" data-panel-content="stats">${statHtml(sp)}</div><div class="info-panel" data-panel-content="spawn">${(localSpawn(e).length?localSpawn(e).map(spawnCard).join(''):`<div class="empty-panel">No standard Cobblemon spawn entry.</div>`)}</div>
-        <div class="info-panel" data-panel-content="breeding"><div class="info-grid"><div class="info-item"><b>Egg groups</b><span>${escHtml((sp.eggGroups||[]).map(prettyLabel).join(', ')||'—')}</span></div><div class="info-item"><b>Experience group</b><span>${escHtml(prettyLabel(sp.experienceGroup||'')||'—')}</span></div><div class="info-item"><b>Base friendship</b><span>${sp.baseFriendship??'—'}</span></div></div></div>
-        <div class="info-panel" data-panel-content="notes"><textarea id="pokemonNote" class="note-box">${escHtml(notes[e.id]||'')}</textarea><button id="saveNote" class="primary note-save">Save note</button></div>`;
+        <div class="detail-main">
+          <div class="eyebrow">POKÉDEX #${String(e.dex).padStart(3,'0')}</div><h2>${escHtml(e.name)}</h2>
+          ${e.form?`<p class="detail-form">${escHtml(e.form)}</p>`:''}
+          <div class="types detail-types">${types.map(t=>`<span class="type" style="${typeStyle(t)}">${escHtml(typeLabel(t))}</span>`).join('')}</div>
+          <div class="detail-status"><span class="detail-status-pill ${caught?'is-caught':''}">${caught?'✓ Caught':'○ Missing'}</span><span class="detail-status-pill ${fav?'is-favorite':''}">${fav?'★ Favorite':'☆ Not favorite'}</span></div>
+          <div class="detail-actions"><button id="detailCaught" class="${caught?'primary':'secondary'}">${caught?'✓ Caught':'Mark caught'}</button><button id="detailFav" class="secondary">${fav?'★ Favorite':'☆ Favorite'}</button></div>
+        </div>
+      </div>${navHtml}
+      <div class="info-section"><div class="section-heading detail-section-heading"><div><span class="eyebrow">OVERVIEW</span><h3>Pokédex information</h3></div></div><div class="info-grid">
+        <div class="info-item"><b>Generation</b><span>${gen?`Generation ${generationName(gen)}`:'Special / Cobblemon'}</span></div>
+        <div class="info-item"><b>Collection</b><span>${escHtml(collectionLabel)}</span></div>
+        <div class="info-item"><b>Location</b><span>${escHtml(location)}</span></div>
+        <div class="info-item"><b>Height</b><span>${sp.height!=null?(Number(sp.height)/10).toFixed(1)+' m':'—'}</span></div>
+        <div class="info-item"><b>Weight</b><span>${sp.weight!=null?(Number(sp.weight)/10).toFixed(1)+' kg':'—'}</span></div>
+        <div class="info-item"><b>Abilities</b><span>${escHtml((sp.abilities||[]).join(', ')||'—')}</span></div>
+      </div></div>${formsHtml}
+      <div class="info-section"><div class="section-heading detail-section-heading"><div><span class="eyebrow">EVOLUTION</span><h3>Evolution line</h3></div></div>${evoHtml(e)}</div>
+      <div class="info-tabs"><button class="info-tab active" data-panel="stats">Base stats</button><button class="info-tab" data-panel="spawn">Spawn</button><button class="info-tab" data-panel="breeding">Breeding</button><button class="info-tab" data-panel="notes">My note</button></div>
+      <div class="info-panel active" data-panel-content="stats">${statHtml(sp)}</div>
+      <div class="info-panel" data-panel-content="spawn">${localSpawn(e).length?localSpawn(e).map(spawnCard).join(''):`<div class="empty-panel">No standard Cobblemon spawn entry.</div>`}</div>
+      <div class="info-panel" data-panel-content="breeding"><div class="info-grid"><div class="info-item"><b>Egg groups</b><span>${escHtml((sp.eggGroups||[]).map(prettyLabel).join(', ')||'—')}</span></div><div class="info-item"><b>Experience group</b><span>${escHtml(prettyLabel(sp.experienceGroup||'')||'—')}</span></div><div class="info-item"><b>Base friendship</b><span>${sp.baseFriendship??'—'}</span></div></div></div>
+      <div class="info-panel" data-panel-content="notes"><textarea id="pokemonNote" class="note-box">${escHtml(notes[e.id]||'')}</textarea><button id="saveNote" class="primary note-save">Save note</button></div>`;
       bindInfoTabs();
-      $('#detailCaught').onclick=()=>{if(state[e.id])delete state[e.id];else state[e.id]=true;saveAll();openInfo(e.id);render();};
-      $('#detailFav').onclick=()=>{favorites[e.id]=!favorites[e.id];if(!favorites[e.id])delete favorites[e.id];saveAll();openInfo(e.id);};
-      $('#detailPrev').onclick=()=>openInfo(prev.id); $('#detailNext').onclick=()=>openInfo(next.id);
-      $('#saveNote').onclick=()=>{notes[e.id]=$('#pokemonNote').value;saveAll();$('#saveNote').textContent='Saved ✓';};
+      $('#detailCaught')?.addEventListener('click',()=>{if(state[e.id])delete state[e.id];else state[e.id]=true;saveAll();openInfo(e.id);render();});
+      $('#detailFav')?.addEventListener('click',()=>{favorites[e.id]=!favorites[e.id];if(!favorites[e.id])delete favorites[e.id];saveAll();openInfo(e.id);});
+      $('#detailPrev')?.addEventListener('click',()=>prev&&openInfo(prev.id));
+      $('#detailNext')?.addEventListener('click',()=>next&&openInfo(next.id));
+      $('#saveNote')?.addEventListener('click',()=>{notes[e.id]=$('#pokemonNote').value;saveAll();$('#saveNote').textContent='Saved ✓';});
+      $$('[data-detail-form]').forEach(b=>b.onclick=()=>openInfo(b.dataset.detailForm));
     }
     $('#infoOverlay').hidden=false;$('#infoDropdown').hidden=false;document.body.classList.add('modal-open');$('#infoDropdown').scrollTop=0;
   };
@@ -213,9 +245,35 @@
 
   // Boot V1.1 after the V1.0 app has loaded its data and local state.
   function boot(){
-    document.title='Cobblemon LivingDex — V1.1';
-    addBackupControls(); renderTopNav(); renderView();
-    document.addEventListener('keydown',e=>{if(e.key==='Escape')closeFilterModal();});
+    document.title='Cobblemon LivingDex — V1.2';
+    // Expose the V1.1/V1.2 views explicitly so the database layer and navigation
+    // always call the same implementations.
+    window.renderTraining = renderTraining;
+    window.renderProgressPlus = renderProgressPlus;
+    window.renderTopNav = renderTopNav;
+    window.renderView = renderView;
+    addBackupControls();
+    // Always boot into the LivingDex with the grid rendered immediately.
+    // The V1.0 app initializes before this file loads, so explicitly render the
+    // default view here as well; this prevents a blank first screen until the
+    // LivingDex button is clicked.
+    view='dex';
+    renderTopNav();
+    renderView();
+    // Re-bind navigation with delegation. This prevents an older V1.0 handler
+    // from swallowing the new Training/Progress views.
+    document.addEventListener('click', e=>{
+      const b=e.target.closest?.('.top-nav-btn');
+      if(!b)return;
+      const target=b.dataset.view;
+      if(!['dex','team','types','training','achievements'].includes(target))return;
+      e.preventDefault();
+      closeInfo();
+      view=target;
+      window.renderTopNav();
+      window.renderView();
+    });
+    document.addEventListener('keydown',e=>{if(e.key==='Escape' && typeof closeFilterModal==='function')closeFilterModal();});
   }
   boot();
 })();
