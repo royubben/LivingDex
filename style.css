@@ -2619,3 +2619,5 @@ main{max-width:1560px;padding:28px 30px 42px}
 .top-nav{justify-content:flex-start!important;overflow-x:auto!important;overscroll-behavior-x:contain}
 .top-nav-btn[data-view="daily"]{font-weight:900}
 .top-nav-btn[data-view="daily"]::before{content:"▣";font-size:10px;margin-right:5px;opacity:.7}
+
+.daily-month-bar.single-forward{grid-template-columns:1fr 42px}.daily-month-bar.single-forward>div{text-align:center}

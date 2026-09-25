@@ -1,4 +1,4 @@
-/* Cobblemon LivingDex V1.3 — online accounts, profiles, saves and leaderboards. */
+/* Cobblemon LivingDex V1.5.2 — online accounts, profiles, saves and leaderboards. */
 (() => {
   const CFG = window.LIVINGDEX_SUPABASE || {};
   const ONLINE = !!(CFG.url && CFG.key && window.supabase);

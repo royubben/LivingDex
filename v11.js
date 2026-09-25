@@ -1,6 +1,6 @@
 /* Cobblemon LivingDex V1.1 - LivingDex Plus */
 (() => {
-  const V11_VERSION = '1.5.0';
+  const V11_VERSION = '1.5.2';
   const adv = { generation:'all', type:'all', status:'all', special:'all' };
   let trainingSession = null;
   let trainingStats = JSON.parse(localStorage.getItem('cobblemon-livingdex-training') || '{}');
@@ -229,12 +229,13 @@
 
   let dailyCalendarYear = new Date().getFullYear();
   let dailyCalendarMonth = new Date().getMonth();
+  let dailyEligibleCache = null;
   const monthName = (year,month) => new Intl.DateTimeFormat('en-GB',{month:'long',year:'numeric'}).format(new Date(year,month,1));
   const compareDateKey = (a,b) => a===b?0:(a<b?-1:1);
   const monthDays = (year,month) => new Date(year,month+1,0).getDate();
-  const firstDateOfMonth = (year,month) => `${year}-${String(month+1).padStart(2,'0')}-01`;
+  const dailyEligibleEntries = () => dailyEligibleCache ||= mainEntries().filter(isDailyEligible);
   const dailyEntryForDate = key => {
-    const list=mainEntries().filter(isDailyEligible); if(!list.length)return null;
+    const list=dailyEligibleEntries(); if(!list.length)return null;
     let h=0; for(let i=0;i<key.length;i++)h=(h*31+key.charCodeAt(i))>>>0;
     return list[h%list.length];
   };
@@ -251,9 +252,9 @@
     backfillDailyHistory();
     const ds=dailyStats(), today=dailyDateKey();
     const minMonth=ds.firstDate ? new Date(`${ds.firstDate}T12:00:00`) : new Date();
-    const currentMonth=new Date(new Date().getFullYear(),new Date().getMonth(),1);
+    const firstAvailableMonth=new Date(minMonth.getFullYear(),minMonth.getMonth(),1);
     const viewingDate=new Date(dailyCalendarYear,dailyCalendarMonth,1);
-    if(viewingDate>currentMonth){ dailyCalendarYear=currentMonth.getFullYear(); dailyCalendarMonth=currentMonth.getMonth(); }
+    if(viewingDate<firstAvailableMonth){ dailyCalendarYear=firstAvailableMonth.getFullYear(); dailyCalendarMonth=firstAvailableMonth.getMonth(); }
     const y=dailyCalendarYear,m=dailyCalendarMonth,totalDays=monthDays(y,m);
     let leading=(new Date(y,m,1).getDay()+6)%7;
     const cells=[];
@@ -264,17 +265,14 @@
       const entry=dailyEntryForDate(key), status=dailyHistoryStatus(key,entry);
       if(status==='complete')monthComplete++; else if(status==='missed')monthMissed++; else if(status==='today')monthPending++;
       const future=status==='future', untracked=status==='untracked';
-      const sprite=entry && !future && !untracked ? `<img src="${spritePath(entry)}" alt="${escHtml(entry.name)}">` : '';
+      const sprite=entry && !future && !untracked ? `<img loading="lazy" decoding="async" src="${spritePath(entry)}" alt="${escHtml(entry.name)}">` : '';
       const name=entry && !future && !untracked ? escHtml(entry.name) : future ? 'Not yet' : 'Not tracked';
       const dayButton = (entry && !future && !untracked)
         ? `<button class="daily-calendar-day ${status}${key===today?' is-today':''}" data-daily-date="${key}" aria-label="${escHtml(entry.name)} on ${key}"><span class="daily-day-number">${day}</span><span class="daily-day-state">${status==='complete'?'✓':status==='missed'?'×':status==='today'?'TODAY':''}</span><div class="daily-day-art">${sprite}</div><b>${name}</b></button>`
         : `<div class="daily-calendar-day ${status}${key===today?' is-today':''}"><span class="daily-day-number">${day}</span><span class="daily-day-state">${future?'':''}</span><div class="daily-day-art">${future?'<span class="daily-question">?</span>':''}</div><b>${name}</b></div>`;
       cells.push(dayButton);
     }
-    const canGoPrev = viewingDate>new Date(minMonth.getFullYear(),minMonth.getMonth(),1);
-    const canGoNext = viewingDate<currentMonth;
-    const shownCompleted=(y===currentMonth.getFullYear()&&m===currentMonth.getMonth())?monthComplete:monthComplete;
-    const completionForMonth=totalDays ? Math.round(monthComplete/Math.max(1,monthComplete+monthMissed+monthPending)*100) : 0;
+    const canGoNext = true;
     const firstTracked=ds.firstDate;
     $('#view').innerHTML=`<div class="page-card daily-calendar-page">
       <div class="daily-calendar-hero">
@@ -282,20 +280,35 @@
         <div class="daily-streak-hero"><span>🔥 Current streak</span><strong>${Number(ds.streak||0)}</strong><small>Best ${Number(ds.bestStreak||0)} days</small></div>
       </div>
       <section class="daily-calendar-panel">
-        <div class="daily-month-bar"><button class="secondary daily-month-btn" id="dailyPrevMonth" ${canGoPrev?'':'disabled'}>←</button><div><span class="eyebrow">MONTHLY JOURNAL</span><h3>${monthName(y,m)}</h3><p>${monthComplete} completed · ${monthMissed} missed${monthPending?' · today pending':''}</p></div><button class="secondary daily-month-btn" id="dailyNextMonth" ${canGoNext?'':'disabled'}>→</button></div>
+        <div class="daily-month-bar"><button class="secondary daily-month-btn" id="dailyPrevMonth" aria-label="Previous month">←</button><div><span class="eyebrow">MONTHLY JOURNAL</span><h3>${monthName(y,m)}</h3><p>${monthComplete} completed · ${monthMissed} missed${monthPending?' · today pending':''}</p></div><button class="secondary daily-month-btn" id="dailyNextMonth" aria-label="Next month">→</button></div>
         <div class="daily-month-summary"><span><i class="daily-key-dot complete"></i>Completed</span><span><i class="daily-key-dot missed"></i>Missed</span><span><i class="daily-key-dot today"></i>Today</span><span><i class="daily-key-dot future"></i>Future</span></div>
         <div class="daily-weekdays">${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(x=>`<span>${x}</span>`).join('')}</div>
         <div class="daily-calendar-grid">${cells.join('')}</div>
       </section>
       <section class="daily-insight-grid">
         <article><span class="eyebrow">TOTAL COMPLETED</span><strong>${Number(ds.totalCompleted||0)}</strong><small>Daily Dex days completed</small></article>
-        <article><span class="eyebrow">THIS MONTH</span><strong>${completionForMonth}%</strong><small>${monthComplete} completed days</small></article>
+        <article><span class="eyebrow">THIS MONTH</span><strong>${totalDays ? Math.round(monthComplete/Math.max(1,monthComplete+monthMissed+monthPending)*100) : 0}%</strong><small>${monthComplete} completed days</small></article>
         <article><span class="eyebrow">BEST STREAK</span><strong>${Number(ds.bestStreak||0)}</strong><small>Longest consecutive streak</small></article>
         <article><span class="eyebrow">TRACKING SINCE</span><strong>${firstTracked?new Intl.DateTimeFormat('en-GB',{day:'numeric',month:'short',year:'numeric'}).format(new Date(`${firstTracked}T12:00:00`)):'Today'}</strong><small>Your Daily Dex journey</small></article>
       </section>
     </div>`;
-    $('#dailyPrevMonth')?.addEventListener('click',()=>{dailyCalendarMonth--;if(dailyCalendarMonth<0){dailyCalendarMonth=11;dailyCalendarYear--;}renderDailyDex();});
-    $('#dailyNextMonth')?.addEventListener('click',()=>{dailyCalendarMonth++;if(dailyCalendarMonth>11){dailyCalendarMonth=0;dailyCalendarYear++;}renderDailyDex();});
+    const firstMonthIndex=firstAvailableMonth.getFullYear()*12+firstAvailableMonth.getMonth();
+    const viewingMonthIndex=y*12+m;
+    const prevBtn=$('#dailyPrevMonth');
+    if(prevBtn){
+      prevBtn.disabled=viewingMonthIndex<=firstMonthIndex;
+      prevBtn.addEventListener('click',()=>{
+        if(viewingMonthIndex<=firstMonthIndex)return;
+        dailyCalendarMonth--;
+        if(dailyCalendarMonth<0){dailyCalendarMonth=11;dailyCalendarYear--;}
+        renderDailyDex();
+      });
+    }
+    $('#dailyNextMonth')?.addEventListener('click',()=>{
+      dailyCalendarMonth++;
+      if(dailyCalendarMonth>11){dailyCalendarMonth=0;dailyCalendarYear++;}
+      renderDailyDex();
+    });
     $$('[data-daily-date]').forEach(b=>b.addEventListener('click',()=>{const e=dailyEntryForDate(b.dataset.dailyDate);if(e)openInfo(e.id);}));
   }
   function renderProgressPlus(){
