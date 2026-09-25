@@ -17,6 +17,7 @@
     notes: window.notes || {},
     team: window.team || [],
     training: (() => { try { return JSON.parse(localStorage.getItem('cobblemon-livingdex-training') || '{}'); } catch { return {}; } })(),
+    settings: { theme: localStorage.getItem('livingdex-theme') || 'dark' },
   });
 
   function onlineNotice() {
@@ -60,12 +61,21 @@
     if(p){ const lp=profileLocal()||{}; localStorage.setItem('cobblemon-livingdex-profile',JSON.stringify({...lp,...p,trainerName:p.display_name,assistantName:p.dex_name})); }
     if(s){
       const local=localPayload();
-      const remoteEmpty=!Object.keys(s.state||{}).length && !Object.keys(s.favorites||{}).length && !(s.team||[]).length;
-      if(remoteEmpty && (Object.keys(local.state).length || Object.keys(local.favorites).length || local.team.length)){ await saveOnline(); return; }
+      const remoteTraining=s.training||{};
+      const remoteHasTraining=Object.keys(remoteTraining).some(k=>k!=='__settings');
+      const remoteHasSettings=!!(remoteTraining.__settings&&Object.keys(remoteTraining.__settings).length);
+      const remoteEmpty=!Object.keys(s.state||{}).length && !Object.keys(s.favorites||{}).length && !Object.keys(s.notes||{}).length && !(s.team||[]).length && !remoteHasTraining && !remoteHasSettings;
+      if(remoteEmpty && (Object.keys(local.state).length || Object.keys(local.favorites).length || Object.keys(local.notes).length || local.team.length || Object.keys(local.training).length || local.settings.theme!=='dark')){ await saveOnline(); return; }
       ['state','favorites','notes'].forEach(k=>{ if(window[k] && s[k]){Object.keys(window[k]).forEach(x=>delete window[k][x]);Object.assign(window[k],s[k]);} });
       if(Array.isArray(s.team)&&Array.isArray(window.team)){window.team.splice(0,window.team.length,...s.team);}
-      try { localStorage.setItem('cobblemon-livingdex-training',JSON.stringify(s.training||{})); } catch {}
-      window.saveAll?.();
+      try {
+        const remoteTraining={...(s.training||{})};
+        const remoteSettings=remoteTraining.__settings||{};
+        delete remoteTraining.__settings;
+        localStorage.setItem('cobblemon-livingdex-training',JSON.stringify(remoteTraining));
+        if(remoteSettings.theme) localStorage.setItem('livingdex-theme',remoteSettings.theme);
+      } catch {}
+      try { document.body.classList.toggle('light-mode', localStorage.getItem('livingdex-theme')==='light'); } catch {}
     }
     window.render?.(); window.renderProgressPlus?.();
   }
@@ -74,6 +84,7 @@
     if(!ONLINE||!currentUser) return;
     const payload=localPayload();
     const profile=profileLocal()||{};
+    const cloudTraining = {...(payload.training||{}), __settings: payload.settings||{}};
     const {error: pe}=await client.from('profiles').upsert({
       id:currentUser.id, display_name:profile.trainerName||profile.display_name||'Trainer', dex_name:profile.assistantName||profile.dex_name||'Dex',
       favorite_pokemon:profile.favoritePokemon||null, favorite_type:profile.favoriteType||null, favorite_region:profile.favoriteRegion||null,
@@ -81,13 +92,26 @@
       show_profile:profile.showProfile!==false, show_in_players:profile.showInPlayers!==false,
       show_on_leaderboard:profile.showOnLeaderboard!==false, show_team:profile.showTeam!==false, updated_at:new Date().toISOString()
     });
-    const {error: se}=await client.from('player_saves').upsert({user_id:currentUser.id,...payload,updated_at:new Date().toISOString()});
+    const {error: se}=await client.from('player_saves').upsert({user_id:currentUser.id,state:payload.state,favorites:payload.favorites,notes:payload.notes,team:payload.team,training:cloudTraining,updated_at:new Date().toISOString()});
     if(pe||se) console.warn('LivingDex online save failed',pe||se);
   }
 
   function queueSave(){ if(!currentUser)return; clearTimeout(syncTimer); syncTimer=setTimeout(saveOnline,700); }
 
-  async function logout(){ if(ONLINE) await client.auth.signOut(); currentUser=null; renderAccountState(); }
+  function localTraining(){ try { return JSON.parse(localStorage.getItem('cobblemon-livingdex-training') || '{}'); } catch { return {}; } }
+  function localTheme(){ return localStorage.getItem('livingdex-theme') || 'dark'; }
+  let lastTrainingSnapshot = JSON.stringify(localTraining());
+  let lastThemeSnapshot = localTheme();
+  function watchLocalOnlineData(){
+    if(!currentUser) return;
+    const t=JSON.stringify(localTraining());
+    const th=localTheme();
+    if(t!==lastTrainingSnapshot || th!==lastThemeSnapshot){
+      lastTrainingSnapshot=t; lastThemeSnapshot=th; queueSave();
+    }
+  }
+
+  async function logout(){ if(ONLINE){ clearTimeout(syncTimer); await saveOnline(); await client.auth.signOut(); } currentUser=null; renderAccountState(); }
 
   function renderAccountState(){
     const b=$('#profileBtn'); if(!b)return;
@@ -97,8 +121,8 @@
   function profilePage(){
     const p=profileLocal()||{};
     $('#dexView').hidden=true; $('#view').hidden=false;
-    $('#view').innerHTML=`<div class="page-card online-page"><div class="page-title"><div><div class="eyebrow">ONLINE TRAINER</div><h2>${esc(p.trainerName||'Trainer')}</h2><p>${currentUser?esc(currentUser.email||''):'Local profile — sign in to sync online.'}</p></div><div class="online-status ${currentUser?'connected':''}">${currentUser?'● Online':'○ Offline account'}</div></div>${onlineNotice()}<div class="online-grid"><section class="team-panel"><span class="eyebrow">ACCOUNT</span><h3>${currentUser?'Connected':'Not connected'}</h3><p>${currentUser?'Your LivingDex can sync between devices.':'Your current collection remains local until you connect an account.'}</p><div class="online-actions">${currentUser?'<button id="syncNow" class="primary">Sync now</button><button id="logoutOnline" class="secondary">Sign out</button>':'<button id="loginOnline" class="primary">Sign in</button><button id="signupOnline" class="secondary">Create account</button>'}</div></section><section class="team-panel"><span class="eyebrow">PRIVACY</span><h3>Profile visibility</h3><label class="switch-row"><span>Show me in Players</span><input type="checkbox" id="showPlayers" ${p.showInPlayers!==false?'checked':''}></label><label class="switch-row"><span>Show on Leaderboard</span><input type="checkbox" id="showLeaderboard" ${p.showOnLeaderboard!==false?'checked':''}></label><label class="switch-row"><span>Show my team publicly</span><input type="checkbox" id="showTeam" ${p.showTeam!==false?'checked':''}></label></section></div></div>`;
-    $('#loginOnline')?.addEventListener('click',()=>authModal('login')); $('#signupOnline')?.addEventListener('click',()=>authModal('signup')); $('#logoutOnline')?.addEventListener('click',logout); $('#syncNow')?.addEventListener('click',async()=>{await saveOnline();alert('Synced.');});
+    $('#view').innerHTML=`<div class="page-card online-page"><div class="page-title"><div><div class="eyebrow">ONLINE TRAINER</div><h2>${esc(p.trainerName||'Trainer')}</h2><p>${currentUser?esc(currentUser.email||''):'Local profile — sign in to sync online.'}</p></div><div class="online-status ${currentUser?'connected':''}">${currentUser?'● Online':'○ Offline account'}</div></div>${onlineNotice()}<div class="online-grid"><section class="team-panel"><span class="eyebrow">ACCOUNT</span><h3>${currentUser?'Connected':'Not connected'}</h3><p>${currentUser?'Your LivingDex can sync between devices.':'Your current collection remains local until you connect an account.'}</p><div class="online-actions">${currentUser?'<button id="editProfileOnline" class="primary">Edit Profile</button><button id="syncNow" class="secondary">Sync now</button><button id="logoutOnline" class="secondary">Sign out</button>':'<button id="loginOnline" class="primary">Sign in</button><button id="signupOnline" class="secondary">Create account</button>'}</div></section><section class="team-panel"><span class="eyebrow">PRIVACY</span><h3>Profile visibility</h3><label class="switch-row"><span>Show me in Players</span><input type="checkbox" id="showPlayers" ${p.showInPlayers!==false?'checked':''}></label><label class="switch-row"><span>Show on Leaderboard</span><input type="checkbox" id="showLeaderboard" ${p.showOnLeaderboard!==false?'checked':''}></label><label class="switch-row"><span>Show my team publicly</span><input type="checkbox" id="showTeam" ${p.showTeam!==false?'checked':''}></label></section></div></div>`;
+    $('#loginOnline')?.addEventListener('click',()=>authModal('login')); $('#signupOnline')?.addEventListener('click',()=>authModal('signup')); $('#editProfileOnline')?.addEventListener('click',()=>window.openProfileOptions?.()); $('#logoutOnline')?.addEventListener('click',logout); $('#syncNow')?.addEventListener('click',async()=>{await saveOnline();alert('Synced.');});
     ['showPlayers','showLeaderboard','showTeam'].forEach(id=>$('#'+id)?.addEventListener('change',()=>{const key={showPlayers:'showInPlayers',showLeaderboard:'showOnLeaderboard',showTeam:'showTeam'}[id];const q=profileLocal()||{};q[key]=$('#'+id).checked;localStorage.setItem('cobblemon-livingdex-profile',JSON.stringify(q));saveOnline();}));
   }
 
@@ -122,11 +146,11 @@
 
   async function leaderboardPage(){
     $('#dexView').hidden=true;$('#view').hidden=false;
-    $('#view').innerHTML=`<div class="page-card online-page"><div class="page-title"><div><div class="eyebrow">COMMUNITY</div><h2>Leaderboard</h2><p>Objective collection and training statistics from players who opted in.</p></div></div>${onlineNotice()}<div class="leaderboard-tabs"><button class="primary" data-lb="caught">LivingDex</button><button class="secondary" data-lb="training">Training</button><button class="secondary" data-lb="favorites">Favorites</button></div><div id="leaderboardList"><div class="empty-panel">Loading leaderboard…</div></div></div>`;
+    $('#view').innerHTML=`<div class="page-card online-page"><div class="page-title"><div><div class="eyebrow">COMMUNITY</div><h2>Leaderboard</h2><p>Most Pokémon caught by players who opted in.</p></div></div>${onlineNotice()}<div id="leaderboardList"><div class="empty-panel">Loading leaderboard…</div></div></div>`;
     if(!ONLINE)return;
     const {data,error}=await client.from('leaderboard').select('*').limit(100); if(error){$('#leaderboardList').innerHTML=`<div class="online-error">${esc(error.message)}</div>`;return;}
-    const draw=(mode)=>{const sorted=[...(data||[])].sort((a,b)=>mode==='training'?(b.best_training_score-a.best_training_score||b.best_training_accuracy-a.best_training_accuracy):mode==='favorites'?(b.favorite_count-a.favorite_count||b.caught_count-a.caught_count):(b.caught_count-a.caught_count||b.best_training_score-a.best_training_score));$('#leaderboardList').innerHTML=sorted.map((p,i)=>`<button class="leader-row"><span class="leader-rank">#${i+1}</span><span class="leader-name"><b>${esc(p.display_name)}</b><small>${esc(p.dex_name||'Dex')}</small></span><strong>${mode==='training'?esc(String(p.best_training_score)):mode==='favorites'?esc(String(p.favorite_count)):esc(String(p.caught_count))}</strong><span>${mode==='training'?'best score':mode==='favorites'?'favorites':'caught'}</span></button>`).join('')||'<div class="empty-panel">No players have opted in yet.</div>';};
-    draw('caught'); $$('#view [data-lb]').forEach(b=>b.onclick=()=>{ $$('#view [data-lb]').forEach(x=>x.className='secondary');b.className='primary';draw(b.dataset.lb); });
+    const sorted=[...(data||[])].sort((a,b)=>(Number(b.caught_count)||0)-(Number(a.caught_count)||0)||(Number(b.favorite_count)||0)-(Number(a.favorite_count)||0));
+    $('#leaderboardList').innerHTML=sorted.map((p,i)=>`<button class="leader-row"><span class="leader-rank">#${i+1}</span><span class="leader-name"><b>${esc(p.display_name)}</b><small>${esc(p.dex_name||'Dex')}</small></span><strong>${esc(String(p.caught_count||0))}</strong><span>caught</span></button>`).join('')||'<div class="empty-panel">No players have opted in yet.</div>';
   }
 
   function installNav(){
@@ -168,6 +192,7 @@
     const oldSaveAll=window.saveAll;
     if(oldSaveAll){window.saveAll=()=>{oldSaveAll();queueSave();};}
     installNav(); renderAccountState();
+    setInterval(watchLocalOnlineData, 800);
     $('#profileBtn')?.addEventListener('click',(e)=>{e.stopPropagation();profilePage();window.view='account';});
     // Rebind after v11's profile button handler by replacing the node once.
     const pb=$('#profileBtn'); if(pb){const clone=pb.cloneNode(true);pb.replaceWith(clone);clone.onclick=(e)=>{e.stopPropagation();profilePage();};}

@@ -117,7 +117,7 @@
           ${e.form?`<p class="detail-form">${escHtml(e.form)}</p>`:''}
           <div class="types detail-types">${types.map(t=>`<span class="type" style="${typeStyle(t)}">${escHtml(typeLabel(t))}</span>`).join('')}</div>
           <div class="detail-status"><span class="detail-status-pill ${caught?'is-caught':''}">${caught?'✓ Caught':'○ Missing'}</span><span class="detail-status-pill ${fav?'is-favorite':''}">${fav?'★ Favorite':'☆ Not favorite'}</span></div>
-          <div class="detail-actions"><button id="detailCaught" class="${caught?'primary':'secondary'}">${caught?'✓ Caught':'Mark caught'}</button><button id="detailFav" class="secondary">${fav?'★ Favorite':'☆ Favorite'}</button></div>
+          <div class="detail-actions"><button id="detailCaught" class="${caught?'primary':'secondary'}">${caught?'✓ Caught':'Mark caught'}</button><button id="detailFav" class="secondary">${fav?'★ Favorite':'☆ Favorite'}</button><button id="detailTeam" class="secondary">${team.includes(e.id)?'✓ In Team':'＋ Add to Team'}</button></div>
         </div>
       </div>${navHtml}
       <div class="info-section"><div class="section-heading detail-section-heading"><div><span class="eyebrow">OVERVIEW</span><h3>Pokédex information</h3></div></div><div class="info-grid">
@@ -137,6 +137,19 @@
       bindInfoTabs();
       $('#detailCaught')?.addEventListener('click',()=>{if(state[e.id])delete state[e.id];else state[e.id]=true;saveAll();openInfo(e.id);render();});
       $('#detailFav')?.addEventListener('click',()=>{favorites[e.id]=!favorites[e.id];if(!favorites[e.id])delete favorites[e.id];saveAll();openInfo(e.id);});
+      $('#detailTeam')?.addEventListener('click',()=>{
+        if(team.includes(e.id)){
+          toggleTeam(e.id);
+          openInfo(e.id);
+          return;
+        }
+        if(team.length>=6){
+          alert('Your team is already full (6/6). Remove a Pokémon before adding another one.');
+          return;
+        }
+        toggleTeam(e.id);
+        openInfo(e.id);
+      });
       $('#detailPrev')?.addEventListener('click',()=>prev&&openInfo(prev.id));
       $('#detailNext')?.addEventListener('click',()=>next&&openInfo(next.id));
       $('#saveNote')?.addEventListener('click',()=>{notes[e.id]=$('#pokemonNote').value;saveAll();$('#saveNote').textContent='Saved ✓';});
