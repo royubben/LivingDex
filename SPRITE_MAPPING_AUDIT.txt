@@ -1,0 +1,10 @@
+V1.18 sprite mapping audit
+Manifest entries: 1283
+Local filename aliases generated: 0
+
+Six Hisui-bias entries intentionally have no image in this build because the available previous files were verified byte-identical to Pikachu and were removed rather than reused.
+
+Regenerated aliases: 3
+regional-bias-102-alolan -> 0102_Exeggcute_#U2014_Alolan.png
+regional-bias-104-alolan -> 0104_Cubone_#U2014_Alolan.png
+regional-bias-109-galarian -> 0109_Koffing_#U2014_Galarian.png

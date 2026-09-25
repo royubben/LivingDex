@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cobblemon LivingDex</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <div class="brand-mark">◈</div>
+    <div><h1>Cobblemon LivingDex</h1><span id="brandSubtitle">Personal collection tracker</span></div>
+  </div>
+  <nav id="topNav" class="top-nav"></nav>
+  <div class="progress-wrap">
+    <div class="progress-label"><b id="progressText">0 / 0</b><span id="progressPct">0%</span></div>
+    <div class="progress"><i id="progressBar"></i></div>
+  </div>
+  <div class="header-actions">
+    <button id="resetBtn" class="ghost">Reset collection</button>
+    <div class="settings-wrap">
+      <button id="settingsBtn" class="ghost settings-btn">⚙ <span id="settingsTitle">Settings</span></button>
+      <div id="settingsMenu" class="settings-menu">
+        <div class="settings-heading">Appearance</div>
+        <label id="settingsThemeLabel">Theme</label>
+        <select id="settingsTheme"><option value="dark">Dark</option><option value="light">Light</option></select>
+        <div class="settings-divider"></div>
+        <div class="settings-note">Your collection is saved automatically in this browser.</div>
+      </div>
+    </div>
+  </div>
+</header>
+<main>
+  <div id="dexView">
+    <div class="category-nav">
+      <div class="view-label">View</div>
+      <select id="tabSelect" class="tab-select" aria-label="View"></select>
+    </div>
+    <section class="toolbar">
+      <div class="search"><span>⌕</span><input id="search" placeholder="Search Pokémon, form or type..."></div>
+      <div class="filters">
+        <button class="filter" data-status="favorites" aria-label="Show favorites">★ Favorites</button>
+        <button class="filter" data-status="collected" aria-label="Show collected">✓ Caught</button>
+      </div>
+      <button id="typesBtn" class="types-btn">Types</button>
+    </section>
+    <div id="subInfo" class="subinfo"></div>
+    <div id="boxHeading" class="box-heading">Box 1</div>
+    <section id="grid" class="grid"></section>
+    <div id="empty" class="empty" hidden>No Pokémon found.</div>
+    <footer class="pager"><button id="prev">←</button><span id="pageInfo"></span><button id="next">→</button></footer>
+  </div>
+  <section id="view" class="extra-view" hidden></section>
+</main>
+<div id="typeOverlay" class="modal-overlay" hidden></div>
+<div id="profileOverlay" class="modal-overlay profile-overlay" hidden></div>
+<div id="welcomeOverlay" class="modal-overlay welcome-overlay" hidden></div>
+<div id="welcomeBackModal" class="welcome-back-modal" hidden>
+  <div class="welcome-spark">✦</div>
+  <div class="eyebrow">WELCOME BACK, TRAINER</div>
+  <h2 id="welcomeBackTitle">Welcome back!</h2>
+  <p id="welcomeBackText">Your LivingDex is ready.</p>
+  <div class="welcome-progress"><div><span>LivingDex progress</span><strong id="welcomeProgressText">0%</strong></div><div class="welcome-progress-track"><i id="welcomeProgressBar"></i></div></div>
+  <button id="welcomeBackContinue" class="primary welcome-continue">Let's go</button>
+</div>
+<div id="profileModal" class="profile-modal" hidden>
+  <div class="profile-mark">◈</div>
+  <div class="eyebrow">WELCOME, TRAINER</div>
+  <h2 id="profileGreeting">Before we begin...</h2>
+  <p>Tell me what I should call you, and what you would like to call me.</p>
+  <label for="trainerName">What should I call you?</label>
+  <input id="trainerName" maxlength="24" placeholder="Your name or Trainer">
+  <label for="assistantName">What should you call me?</label>
+  <input id="assistantName" maxlength="24" placeholder="Dex">
+  <button id="profileContinue" class="primary profile-continue">Continue</button>
+</div>
+<div id="typeModal" class="type-modal" hidden>
+  <button id="typeModalClose" class="info-close">×</button>
+  <h2 id="typeModalTitle">Types</h2>
+  <p class="modal-hint">Select one type to include all Pokémon with it, or select two for an exact combination.</p>
+  <div id="typeOptions" class="type-options"></div>
+</div>
+<div id="infoOverlay" class="info-overlay" hidden></div>
+<aside id="infoDropdown" class="info-dropdown modal-center" hidden>
+  <button id="infoClose" class="info-close" aria-label="Close">×</button>
+  <div id="infoContent"></div>
+</aside>
+<script src="data/cobblemon_local.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
