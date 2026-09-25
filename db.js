@@ -1,4 +1,4 @@
-/* Cobblemon LivingDex V1.5.2 — online accounts, profiles, saves and leaderboards. */
+/* Cobblemon LivingDex V1.5.4 — online accounts, profiles, saves and leaderboards. */
 (() => {
   const CFG = window.LIVINGDEX_SUPABASE || {};
   const ONLINE = !!(CFG.url && CFG.key && window.supabase);
@@ -257,7 +257,7 @@
   }
 
   async function boot(){
-    document.title='Cobblemon LivingDex — V1.5';
+    document.title='Cobblemon LivingDex — V1.5.4';
     // Install the local UI before any network request so Progress and the rest
     // of the application are immediately available even if auth is slow.
     installNav();

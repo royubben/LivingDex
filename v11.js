@@ -1,6 +1,6 @@
 /* Cobblemon LivingDex V1.1 - LivingDex Plus */
 (() => {
-  const V11_VERSION = '1.5.2';
+  const V11_VERSION = '1.5.4';
   const adv = { generation:'all', type:'all', status:'all', special:'all' };
   let trainingSession = null;
   let trainingStats = JSON.parse(localStorage.getItem('cobblemon-livingdex-training') || '{}');
@@ -230,14 +230,18 @@
   let dailyCalendarYear = new Date().getFullYear();
   let dailyCalendarMonth = new Date().getMonth();
   let dailyEligibleCache = null;
+  const dailyEntryCache = new Map();
   const monthName = (year,month) => new Intl.DateTimeFormat('en-GB',{month:'long',year:'numeric'}).format(new Date(year,month,1));
   const compareDateKey = (a,b) => a===b?0:(a<b?-1:1);
   const monthDays = (year,month) => new Date(year,month+1,0).getDate();
   const dailyEligibleEntries = () => dailyEligibleCache ||= mainEntries().filter(isDailyEligible);
   const dailyEntryForDate = key => {
+    if(dailyEntryCache.has(key)) return dailyEntryCache.get(key);
     const list=dailyEligibleEntries(); if(!list.length)return null;
     let h=0; for(let i=0;i<key.length;i++)h=(h*31+key.charCodeAt(i))>>>0;
-    return list[h%list.length];
+    const entry=list[h%list.length]||null;
+    dailyEntryCache.set(key,entry);
+    return entry;
   };
   function dailyHistoryStatus(key, entry){
     const today=dailyDateKey(), ds=dailyStats();
@@ -459,7 +463,7 @@
 
   // Boot V1.1 after the V1.0 app has loaded its data and local state.
   function boot(){
-    document.title='Cobblemon LivingDex — V1.5';
+    document.title='Cobblemon LivingDex — V1.5.4';
     // Expose the V1.1/V1.2 views explicitly so the database layer and navigation
     // always call the same implementations.
     window.renderTraining = renderTraining;

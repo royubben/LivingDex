@@ -2621,3 +2621,6 @@ main{max-width:1560px;padding:28px 30px 42px}
 .top-nav-btn[data-view="daily"]::before{content:"▣";font-size:10px;margin-right:5px;opacity:.7}
 
 .daily-month-bar.single-forward{grid-template-columns:1fr 42px}.daily-month-bar.single-forward>div{text-align:center}
+
+/* V1.5.4 performance polish */
+.card{contain:layout paint;will-change:transform}.daily-calendar-day{contain:layout paint}.sprite img,.daily-day-art img{will-change:transform}@media (prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}

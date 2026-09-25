@@ -1,4 +1,5 @@
-# Cobblemon LivingDex V1.5.1
+Cobblemon LivingDex V1.5.4 — performance optimizations
+# Cobblemon LivingDex V1.5.4
 
 ## Daily Dex
 - Dedicated Daily Dex tab.
