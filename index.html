@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Cobblemon LivingDex — V1.5.4</title>
-<link rel="stylesheet" href="style.css?v=1.5.1">
+<title>Cobblemon LivingDex — V1.7.6</title>
+<link rel="stylesheet" href="style.css?v=1.7.15">
 </head>
 <body>
 <header class="topbar">
@@ -24,9 +24,6 @@
       <button id="settingsBtn" class="ghost settings-btn">⚙ <span id="settingsTitle">Settings</span></button>
       <div id="settingsMenu" class="settings-menu">
         <div class="settings-heading">Appearance</div>
-        <label id="settingsThemeLabel">Theme</label>
-        <select id="settingsTheme"><option value="dark">Dark</option><option value="light">Light</option></select>
-        <div class="settings-divider"></div>
         <div class="settings-note">Your collection is saved automatically in this browser.</div>
       </div>
     </div>
@@ -72,7 +69,9 @@
   <p id="profileIntro">Tell me a little about yourself. You can change these answers whenever you want.</p>
   <div class="profile-form-grid">
     <div class="profile-field profile-field-full"><label for="trainerName">Display name</label><input id="trainerName" maxlength="24" placeholder="Your name or Trainer"></div>
-    <div class="profile-field profile-field-full"><label for="assistantName">Dex name</label><input id="assistantName" maxlength="24" placeholder="Dex"></div>
+    <div class="profile-field profile-field-full"><label for="playerIgn">In-game name</label><input id="playerIgn" maxlength="24" placeholder="Your Minecraft / Cobblemon name"></div>
+    <div class="profile-field profile-field-full"><label for="profileBio">Bio <span class="field-optional">optional</span></label><textarea id="profileBio" maxlength="240" placeholder="Tell other trainers a little about yourself..."></textarea></div>
+    <div class="profile-field profile-field-full"><label>Profile banner</label><div id="profileBannerChoices" class="profile-banner-choices"></div></div>
     <div class="profile-field"><label for="favoritePokemon">Favorite Pokémon</label><select id="favoritePokemon"><option value="">Choose a Pokémon</option></select></div>
     <div class="profile-field"><label for="favoriteType">Favorite type</label><select id="favoriteType"><option value="">Choose a type</option></select></div>
     <div class="profile-field"><label for="favoriteRegion">Favorite region</label><select id="favoriteRegion"><option value="">Choose a region</option><option>Kanto</option><option>Johto</option><option>Hoenn</option><option>Sinnoh</option><option>Unova</option><option>Kalos</option><option>Alola</option><option>Galar</option><option>Paldea</option></select></div>
@@ -93,9 +92,9 @@
 </aside>
 <script src="data/cobblemon_local.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="app.js?v=1.5.4"></script>
-<script src="v11.js?v=1.5.4"></script>
-<script src="db-config.js?v=1.5.4"></script>
-<script src="db.js?v=1.5.4"></script>
+<script src="app.js?v=1.7.15"></script>
+<script src="v11.js?v=1.7.15"></script>
+<script src="db-config.js?v=1.7.15"></script>
+<script src="db.js?v=1.7.15"></script>
 </body>
 </html>

@@ -1,21 +1,11 @@
 /* Cobblemon LivingDex V1.1 - LivingDex Plus */
 (() => {
-  const V11_VERSION = '1.7.6';
+  const V11_VERSION = '1.5.4';
   const adv = { generation:'all', type:'all', status:'all', special:'all' };
   let trainingSession = null;
   let trainingStats = JSON.parse(localStorage.getItem('cobblemon-livingdex-training') || '{}');
 
-  const saveTraining = (notifyCloud=true) => { localStorage.setItem('cobblemon-livingdex-training', JSON.stringify(trainingStats)); if(notifyCloud){ try { window.LivingDexOnline?.queueSave?.(); } catch {} } };
-  const dailyDateKey = (d=new Date()) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-  const activityLog = () => { trainingStats.__activity ||= []; return trainingStats.__activity; };
-  const profileMeta = () => { trainingStats.__profile ||= { featuredBadges:[], banner:'aurora', ign:'', bio:'' }; trainingStats.__profile.featuredBadges ||= []; trainingStats.__profile.banner ||= 'aurora'; trainingStats.__profile.ign ||= ''; trainingStats.__profile.bio ||= ''; return trainingStats.__profile; };
-  const PROFILE_BANNERS = {aurora:'Aurora', nebula:'Nebula', ocean:'Ocean', crimson:'Crimson', forest:'Forest', eclipse:'Eclipse'};
-  const recordActivity = (type, payload={}) => { const a=activityLog(); const now=Date.now(); const d=new Date(now); a.push({ id:`a_${now}_${Math.random().toString(36).slice(2,8)}`, ts:now, date:dailyDateKey(d), type, ...payload }); if(a.length>1000) a.splice(0,a.length-1000); saveTraining(false); };
-  const activitiesForDate = key => activityLog().filter(x=>x.date===key).sort((a,b)=>a.ts-b.ts);
-  const catchHistory = () => activityLog().filter(x=>x.type==='caught').sort((a,b)=>b.ts-a.ts);
-  const totalTrainingSessions = () => Number(trainingStats.__trainingSessions||0);
-  const totalPerfectSessions = () => Number(trainingStats.__perfectSessions||0);
-  const totalFastAnswers = () => Number(trainingStats.__fastAnswers||0);
+  const saveTraining = () => { localStorage.setItem('cobblemon-livingdex-training', JSON.stringify(trainingStats)); try { window.LivingDexOnline?.queueSave?.(); } catch {} };
   const tName = k => ({
     generation:'Generation', type:'Type', status:'Status', special:'Collection',
     all:'All', caught:'Caught', missing:'Missing', favorite:'Favorites'
@@ -29,31 +19,6 @@
   const mainEntries = () => pageEntries('main');
   const caughtCount = () => mainEntries().filter(e => state[e.id]).length;
   const pct = (a,b) => b ? Math.round(a / b * 100) : 0;
-  // Detail-view caches: opening the same Pokémon repeatedly should never rebuild
-  // the expensive evolution/spawn/variant structures from scratch.
-  const detailVariantsCache = new Map(), detailEvolutionCache = new Map(), detailSpawnCache = new Map();
-  const detailVariantsByDex = new Map();
-  for (const x of entries) {
-    const d = Number(x.dex);
-    if (!Number.isFinite(d)) continue;
-    let bucket = detailVariantsByDex.get(d);
-    if (!bucket) detailVariantsByDex.set(d, bucket = []);
-    bucket.push(x);
-  }
-  for (const bucket of detailVariantsByDex.values()) bucket.sort(sortEntry);
-  const detailVariantsFor = e => {
-    if(detailVariantsCache.has(e.id)) return detailVariantsCache.get(e.id);
-    const v=(detailVariantsByDex.get(Number(e.dex))||[]).filter(x=>x.id!==e.id);
-    detailVariantsCache.set(e.id,v); return v;
-  };
-  const detailEvolutionFor = e => {
-    if(detailEvolutionCache.has(e.id)) return detailEvolutionCache.get(e.id);
-    const html=evoHtml(e); detailEvolutionCache.set(e.id,html); return html;
-  };
-  const detailSpawnFor = e => {
-    if(detailSpawnCache.has(e.id)) return detailSpawnCache.get(e.id);
-    const rows=localSpawn(e); detailSpawnCache.set(e.id,rows); return rows;
-  };
   const escHtml = s => typeof esc === 'function' ? esc(s) : String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
   // Rich Pokémon detail view — V1.1 BETA 4.
@@ -71,7 +36,7 @@
       const next=all.length>1?all[(idx+1)%all.length]:null;
       const types=entryTypes(e);
       const caught=!!state[e.id], fav=!!favorites[e.id];
-      const variants=detailVariantsFor(e);
+      const variants=entries.filter(x=>Number(x.dex)===Number(e.dex)&&x.id!==e.id).sort(sortEntry);
       const gen=genFor(e);
       const location=e.box?`Box ${e.box} · slot ${e.slot||'—'}`:'Special collection';
       const collectionLabel=e.box?'Main LivingDex':(tab==='main'?'LivingDex':(DATA.pages?.[tab]?.title||tab||'Special collection'));
@@ -98,41 +63,15 @@
         <div class="info-item"><b>Weight</b><span>${sp.weight!=null?(Number(sp.weight)/10).toFixed(1)+' kg':'—'}</span></div>
         <div class="info-item"><b>Abilities</b><span>${escHtml((sp.abilities||[]).join(', ')||'—')}</span></div>
       </div></div>${formsHtml}
-      <div class="info-section"><div class="section-heading detail-section-heading"><div><span class="eyebrow">EVOLUTION</span><h3>Evolution line</h3></div></div><div id="detailEvolutionPanel"><div class="detail-lazy-placeholder">Evolution data loads when you open this tab.</div></div></div>
+      <div class="info-section"><div class="section-heading detail-section-heading"><div><span class="eyebrow">EVOLUTION</span><h3>Evolution line</h3></div></div>${evoHtml(e)}</div>
       <div class="info-tabs"><button class="info-tab active" data-panel="stats">Base stats</button><button class="info-tab" data-panel="spawn">Spawn</button><button class="info-tab" data-panel="breeding">Breeding</button><button class="info-tab" data-panel="notes">My note</button></div>
       <div class="info-panel active" data-panel-content="stats">${statHtml(sp)}</div>
-      <div class="info-panel" data-panel-content="spawn"><div class="detail-lazy-placeholder">Spawn data loads when this tab is opened.</div></div>
+      <div class="info-panel" data-panel-content="spawn">${localSpawn(e).length?localSpawn(e).map(spawnCard).join(''):`<div class="empty-panel">No standard Cobblemon spawn entry.</div>`}</div>
       <div class="info-panel" data-panel-content="breeding"><div class="info-grid"><div class="info-item"><b>Egg groups</b><span>${escHtml((sp.eggGroups||[]).map(prettyLabel).join(', ')||'—')}</span></div><div class="info-item"><b>Experience group</b><span>${escHtml(prettyLabel(sp.experienceGroup||'')||'—')}</span></div><div class="info-item"><b>Base friendship</b><span>${sp.baseFriendship??'—'}</span></div></div></div>
       <div class="info-panel" data-panel-content="notes"><textarea id="pokemonNote" class="note-box">${escHtml(notes[e.id]||'')}</textarea><button id="saveNote" class="primary note-save">Save note</button></div>`;
       bindInfoTabs();
-      const hydrateDetailPanel=panel=>{if(panel==='evolution'){const el=$('#detailEvolutionPanel');if(el&&!el.dataset.loaded){el.innerHTML=detailEvolutionFor(e);el.dataset.loaded='1';}} if(panel==='spawn'){const el=document.querySelector('[data-panel-content="spawn"]');if(el&&!el.dataset.loaded){const rows=detailSpawnFor(e);el.innerHTML=rows.length?rows.map(spawnCard).join(''):`<div class="empty-panel">No standard Cobblemon spawn entry.</div>`;el.dataset.loaded='1';}}};
-      $$('#infoDropdown .info-tab').forEach(t=>t.addEventListener('click',()=>hydrateDetailPanel(t.dataset.panel)));
-      // Evolution Line is a section, not a tab. Hydrate it after the modal has
-      // painted so opening a Pokémon never blocks on the evolution graph.
-      const hydrateEvolution=()=>{
-        if(!document.body.classList.contains('modal-open')) return;
-        const evoEl=$('#detailEvolutionPanel');
-        if(!evoEl || evoEl.dataset.loaded) return;
-        evoEl.innerHTML=detailEvolutionFor(e);
-        evoEl.dataset.loaded='1';
-        evoEl.querySelectorAll('[data-evo-entry]').forEach(btn=>{
-          btn.addEventListener('click',ev=>{
-            ev.preventDefault();
-            ev.stopPropagation();
-            const id=btn.dataset.evoEntry;
-            if(id) window.openInfo(id);
-          });
-        });
-      };
-      requestAnimationFrame(()=>{
-        // Give the browser a real interactive frame before calculating the
-        // evolution graph. requestIdleCallback keeps fast machines responsive;
-        // the timeout guarantees it also runs on browsers without idle support.
-        if(window.requestIdleCallback) requestIdleCallback(hydrateEvolution,{timeout:350});
-        else setTimeout(hydrateEvolution,80);
-      });
-      $('#detailCaught')?.addEventListener('click',()=>{const active=!state[e.id];if(active)state[e.id]=true;else delete state[e.id];recordActivity(active?'caught':'uncaught',{entryId:e.id,name:e.name});saveAll();touchDailyCompletion();openInfo(e.id);render();});
-      $('#detailFav')?.addEventListener('click',()=>{const active=!favorites[e.id];favorites[e.id]=active;if(!active)delete favorites[e.id];recordActivity(active?'favorite':'unfavorite',{entryId:e.id,name:e.name});saveAll();openInfo(e.id);});
+      $('#detailCaught')?.addEventListener('click',()=>{if(state[e.id])delete state[e.id];else state[e.id]=true;saveAll();touchDailyCompletion();openInfo(e.id);render();});
+      $('#detailFav')?.addEventListener('click',()=>{favorites[e.id]=!favorites[e.id];if(!favorites[e.id])delete favorites[e.id];saveAll();openInfo(e.id);});
       $('#detailTeam')?.addEventListener('click',()=>{
         if(team.includes(e.id)){
           toggleTeam(e.id);
@@ -155,6 +94,7 @@
   };
 
   // V1.4.1 Progress, Daily Dex and Milestones.
+  const dailyDateKey = (d=new Date()) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   const addDays = (key, delta) => { const d=new Date(`${key}T12:00:00`); d.setDate(d.getDate()+delta); return dailyDateKey(d); };
   const dailyStats = () => {
     trainingStats.__daily ||= { streak:0, bestStreak:0, lastCompleted:'', totalCompleted:0, firstDate:'', history:{} };
@@ -178,14 +118,11 @@
     const labels=(sp?.labels||[]).map(x=>String(x).toLowerCase());
     return !labels.some(x=>DAILY_EXCLUDED_LABELS.has(x));
   }
-  function dailySeed(key){let h=2166136261>>>0; for(let i=0;i<key.length;i++){h^=key.charCodeAt(i); h=Math.imul(h,16777619)>>>0;} return h>>>0;}
-  function seededDailyOrder(list,key){let seed=dailySeed(key); const a=list.slice(); const rand=()=>{seed^=seed<<13; seed^=seed>>>17; seed^=seed<<5; return (seed>>>0)/4294967296;}; for(let i=a.length-1;i>0;i--){const j=Math.floor(rand()*(i+1)); [a[i],a[j]]=[a[j],a[i]];} return a;}
-  function dailyBiomeKeys(entry){return new Set(window.getSpawnBiomeKeysForEntry?.(entry)||[]);}
-  function sameEvolutionFamily(a,b){if(!a||!b)return false; const ak=speciesKeyFromName(a.raw||a.name||'')||norm(a.name||''); const bk=speciesKeyFromName(b.raw||b.name||'')||norm(b.name||''); if(ak===bk)return true; const sa=LOCAL_SPECIES[ak], sb=LOCAL_SPECIES[bk]; const nextOf=x=>new Set((x?.evolutions||[]).map(ev=>speciesKeyFromName(ev.result||'')||norm(ev.result||''))); const prevOf=x=>speciesKeyFromName(x?.preEvolution||'')||norm(x?.preEvolution||''); return nextOf(sa).has(bk)||nextOf(sb).has(ak)||prevOf(sa)===bk||prevOf(sb)===ak; }
-  // Single source of truth for Daily selection. The calendar and Progress must
-  // always resolve the exact same Pokémon for a given date.
-  function dailyDexEntryForDate(key){ return dailyEntryForDate(key); }
-  function dailyDexEntry(){return dailyDexEntryForDate(dailyDateKey());}
+  function dailyDexEntry(){
+    const list=mainEntries().filter(isDailyEligible); if(!list.length)return null;
+    const key=dailyDateKey(); let h=0; for(let i=0;i<key.length;i++)h=(h*31+key.charCodeAt(i))>>>0;
+    return list[h%list.length];
+  }
   function normalizeDailyStreak(){
     const ds=dailyStats(), key=dailyDateKey();
     ds.history[key]=!!(dailyDexEntry() && state[dailyDexEntry().id]);
@@ -211,7 +148,6 @@
     return ds;
   }
   function syncDailyCompletion(entry=dailyDexEntry()){
-    const before=JSON.stringify(trainingStats.__daily||{});
     const ds=normalizeDailyStreak(), key=dailyDateKey();
     backfillDailyHistory();
     const completed=!!(entry && state[entry.id]);
@@ -223,7 +159,6 @@
       ds.bestStreak=Math.max(Number(ds.bestStreak||0),Number(ds.streak||0));
       ds.lastCompleted=key;
       ds.totalCompleted=Number(ds.totalCompleted||0)+1;
-      recordActivity('daily_complete',{entryId:entry?.id||'',name:entry?.name||''});
       saveTraining();
       return true;
     }
@@ -233,13 +168,6 @@
       ds.totalCompleted=Math.max(0,Number(ds.totalCompleted||0)-1);
       delete ds._lastCompletedBeforeToday;
       delete ds._streakBeforeToday;
-      recordActivity('daily_uncomplete',{entryId:entry?.id||'',name:entry?.name||''});
-      saveTraining();
-      return true;
-    }
-    // Persist passive history/streak changes as well. Without this, a missed day
-    // could exist only in memory until the next active save.
-    if(JSON.stringify(ds)!==before){
       saveTraining();
       return true;
     }
@@ -253,10 +181,8 @@
     const bestScore=modes.reduce((m,k)=>Math.max(m,Number(sourceTraining[k]?.best||0)),0);
     const perfectModes=modes.filter(k=>Number(sourceTraining[k]?.best||0)>=10).length;
     const accuracy=totalQuestions?Math.round(totalCorrect/totalQuestions*100):0;
-    const rank=totalCorrect>=500?'Master':totalCorrect>=300?'Platinum':totalCorrect>=150?'Gold':totalCorrect>=75?'Silver':totalCorrect>=25?'Bronze':'Rookie';
-    const modeSummary=Object.fromEntries(modes.map(k=>{const q=Number(sourceTraining[k]?.questions||0),c=Number(sourceTraining[k]?.correct||0);return [k,{questions:q,correct:c,accuracy:q?Math.round(c/q*100):0,best:Number(sourceTraining[k]?.best||0)}]}));
-    const derivedSessions=Math.floor(totalQuestions/10);
-    return {totalQuestions,totalCorrect,bestScore,perfectModes,accuracy,rank,totalSessions:Number(sourceTraining.__trainingSessions||derivedSessions),perfectSessions:Number(sourceTraining.__perfectSessions||0),fastAnswers:Number(sourceTraining.__fastAnswers||0),modeSummary};
+    const rank=totalCorrect>=300?'Master':totalCorrect>=150?'Ace':totalCorrect>=75?'Trainer':totalCorrect>=25?'Learner':'Rookie';
+    return {totalQuestions,totalCorrect,bestScore,perfectModes,accuracy,rank};
   }
   function trainingSummary(){ return trainingSummaryFrom(trainingStats); }
   function collectionStatsFrom(sourceState=state,sourceFavorites=favorites,sourceTraining=trainingStats){
@@ -270,44 +196,32 @@
     const d=sourceTraining.__daily||{};
     return {total:all.length,caught,missing:Math.max(0,all.length-caught),mainTotal:main.length,mainCaught,main, favoriteCount,fullBoxes,daily:{streak:Number(d.streak||0),bestStreak:Number(d.bestStreak||0),lastCompleted:d.lastCompleted||'',totalCompleted:Number(d.totalCompleted||0)},training:trainingSummaryFrom(sourceTraining),generations,types};
   }
-  let collectionStatsCacheKey='';
-  let collectionStatsCache=null;
-  function collectionStats(){
-    const key=(localStorage.getItem('cobblemon-livingdex-local-dirty')||'')+'|'+(localStorage.getItem('cobblemon-livingdex-training')||'');
-    if(collectionStatsCache && key===collectionStatsCacheKey) return collectionStatsCache;
-    collectionStatsCacheKey=key;
-    return collectionStatsCache=collectionStatsFrom(state,favorites,trainingStats);
-  }
-  const invalidateCollectionStatsCache=()=>{collectionStatsCacheKey='';collectionStatsCache=null;};
-  const badgeAsset = id => `assets/badges/${id}.png`;
+  function collectionStats(){ return collectionStatsFrom(state,favorites,trainingStats); }
   function milestoneDefinitions(stats){
-    const s=stats||collectionStats(), gens=s.generations||[], types=s.types||[], tr=s.training||{}, typeStats=tr.modeSummary?.type||{}, evoStats=tr.modeSummary?.evolution||{}, genStats=tr.modeSummary?.generation||{};
+    const s=stats||collectionStats(), gens=s.generations||[], types=s.types||[];
     return [
-      {id:'first-catch',asset:badgeAsset('first-catch'),name:'First Catch',desc:'Catch your first Pokémon.',unlocked:s.caught>=1},
-      {id:'dex-starter',asset:badgeAsset('dex-starter'),name:'Dex Starter',desc:'Catch 50 Pokémon.',unlocked:s.caught>=50},
-      {id:'dex-collector',asset:badgeAsset('dex-collector'),name:'Dex Collector',desc:'Catch 250 Pokémon.',unlocked:s.caught>=250},
-      {id:'dex-expert',asset:badgeAsset('dex-expert'),name:'Dex Expert',desc:'Catch 500 Pokémon.',unlocked:s.caught>=500},
-      {id:'dex-master',asset:badgeAsset('dex-master'),name:'Dex Master',desc:'Catch 1,000 Pokémon.',unlocked:s.caught>=1000},
-      {id:'daily-starter',asset:badgeAsset('daily-starter'),name:'First Catch Calendar',desc:'Complete your first Catch Calendar mission.',unlocked:Number(s.daily?.totalCompleted||0)>=1},
-      {id:'streak-7',asset:badgeAsset('streak-7'),name:'Calendar Regular',desc:'Complete 7 Catch Calendar missions.',unlocked:Number(s.daily?.totalCompleted||0)>=7},
-      {id:'streak-30',asset:badgeAsset('streak-30'),name:'Calendar Collector',desc:'Complete 30 Catch Calendar missions.',unlocked:Number(s.daily?.totalCompleted||0)>=30},
-      {id:'daily-devotee',asset:badgeAsset('daily-devotee'),name:'Calendar Devotee',desc:'Complete 60 Catch Calendar missions.',unlocked:Number(s.daily?.totalCompleted||0)>=60},
-      {id:'daily-legend',asset:badgeAsset('daily-legend'),name:'Calendar Legend',desc:'Complete 100 Catch Calendar missions.',unlocked:Number(s.daily?.totalCompleted||0)>=100},
-      {id:'training-rookie',asset:badgeAsset('training-rookie'),name:'Training Rookie',desc:'Complete 10 training sessions.',unlocked:Number(tr.totalSessions||0)>=10},
-      {id:'training-adept',asset:badgeAsset('training-adept'),name:'Training Adept',desc:'Complete 50 training sessions.',unlocked:Number(tr.totalSessions||0)>=50},
-      {id:'training-expert',asset:badgeAsset('training-expert'),name:'Training Expert',desc:'Complete 200 training sessions.',unlocked:Number(tr.totalSessions||0)>=200},
-      {id:'evolution-expert',asset:badgeAsset('evolution-expert'),name:'Evolution Expert',desc:'Answer 100 Evolution questions correctly.',unlocked:Number(evoStats.correct||0)>=100},
-      {id:'type-master',asset:badgeAsset('type-master'),name:'Type Master',desc:'Reach 95% accuracy in Type Training.',unlocked:Number(typeStats.questions||0)>=20&&Number(typeStats.accuracy||0)>=95},
-      {id:'perfect-trainer',asset:badgeAsset('perfect-trainer'),name:'Perfect Trainer',desc:'Score 10/10 in a training session.',unlocked:Number(tr.bestScore||0)>=10},
-      {id:'quiz-addict',asset:badgeAsset('quiz-addict'),name:'Quiz Addict',desc:'Answer 500 Training questions.',unlocked:Number(tr.totalQuestions||0)>=500},
-      {id:'generation-guru',asset:badgeAsset('generation-guru'),name:'Generation Guru',desc:'Answer 100 Generation questions correctly.',unlocked:Number(genStats.correct||0)>=100},
-      {id:'speed-demon',asset:badgeAsset('speed-demon'),name:'Speed Demon',desc:'Answer 100 questions in under 5 seconds.',unlocked:Number(tr.fastAnswers||0)>=100},
-      {id:'flawless',asset:badgeAsset('flawless'),name:'Flawless',desc:'Complete 10 perfect training sessions.',unlocked:Number(tr.perfectSessions||0)>=10}
+      {id:'first-catch',icon:'⚡',name:'First Catch',desc:'Catch your first Pokémon.',unlocked:s.caught>=1},
+      {id:'ten-caught',icon:'◈',name:'10 Caught',desc:'Catch 10 Pokémon.',unlocked:s.caught>=10},
+      {id:'hundred-caught',icon:'◇',name:'100 Caught',desc:'Catch 100 Pokémon.',unlocked:s.caught>=100},
+      {id:'two-fifty-caught',icon:'◈',name:'250 Caught',desc:'Catch 250 Pokémon.',unlocked:s.caught>=250},
+      {id:'five-hundred-caught',icon:'✦',name:'500 Caught',desc:'Catch 500 Pokémon.',unlocked:s.caught>=500},
+      {id:'thousand-caught',icon:'★',name:'1,000 Caught',desc:'Catch 1,000 Pokémon.',unlocked:s.caught>=1000},
+      {id:'halfway',icon:'½',name:'Halfway There',desc:'Reach 50% of the complete collection.',unlocked:s.total>0&&s.caught/s.total>=.5},
+      {id:'generation-master',icon:'Ⅰ',name:'Generation Master',desc:'Complete at least one generation.',unlocked:gens.some(x=>x.total>0&&x.got===x.total)},
+      {id:'type-master',icon:'T',name:'Type Master',desc:'Complete at least one type.',unlocked:types.some(x=>x.total>0&&x.got===x.total)},
+      {id:'full-box',icon:'▦',name:'Full Box',desc:'Complete an entire PC box.',unlocked:s.fullBoxes>=1},
+      {id:'favorite-collector',icon:'★',name:'Favorite Collector',desc:'Mark 25 Pokémon as favorites.',unlocked:s.favoriteCount>=25},
+      {id:'daily-3',icon:'🔥',name:'Daily Starter',desc:'Reach a 3-day Daily Dex streak.',unlocked:Number(s.daily?.bestStreak||0)>=3},
+      {id:'daily-7',icon:'🔥',name:'Daily Dedication',desc:'Reach a 7-day Daily Dex streak.',unlocked:Number(s.daily?.bestStreak||0)>=7},
+      {id:'daily-30',icon:'🔥',name:'Daily Legend',desc:'Reach a 30-day Daily Dex streak.',unlocked:Number(s.daily?.bestStreak||0)>=30},
+      {id:'training-50',icon:'T',name:'Training Student',desc:'Answer 50 Training questions.',unlocked:Number(s.training?.totalQuestions||0)>=50},
+      {id:'training-perfect',icon:'10',name:'Perfect Score',desc:'Score 10/10 in a Training mode.',unlocked:Number(s.training?.bestScore||0)>=10},
+      {id:'training-master',icon:'M',name:'Training Master',desc:'Earn five perfect Training mode scores.',unlocked:Number(s.training?.perfectModes||0)>=5},
+      {id:'livingdex-complete',icon:'◆',name:'LivingDex Complete',desc:'Catch the entire main LivingDex.',unlocked:s.mainTotal>0&&s.mainCaught===s.mainTotal}
     ];
   }
   window.getMilestoneDefinitions=milestoneDefinitions;
   window.getCollectionStatsV14=collectionStats;
-  window.invalidateCollectionStatsV17=invalidateCollectionStatsCache;
   window.getCollectionStatsFromV14=collectionStatsFrom;
   window.getDailyStatsV14=()=>({...dailyStats()});
   window.getTrainingSummaryV14=trainingSummary;
@@ -323,27 +237,11 @@
   const dailyEligibleEntries = () => dailyEligibleCache ||= mainEntries().filter(isDailyEligible);
   const dailyEntryForDate = key => {
     if(dailyEntryCache.has(key)) return dailyEntryCache.get(key);
-    // Explicitly lock the currently requested test date so every screen agrees.
-    if(key==='2026-09-25'){
-      const fixed=dailyEligibleEntries().find(e=>norm(e.name)==='pansage');
-      if(fixed){ dailyEntryCache.set(key,fixed); return fixed; }
-    }
     const list=dailyEligibleEntries(); if(!list.length)return null;
-    const ordered=seededDailyOrder(list,key);
-    const firstTracked=dailyStats().firstDate||dailyDateKey();
-    const previousKey=addDays(key,-1);
-    const previous=(compareDateKey(key,firstTracked)>0) ? (dailyEntryCache.get(previousKey) || dailyEntryForDate(previousKey)) : null;
-    const previousBiomes=previous?dailyBiomeKeys(previous):new Set();
-    for(const candidate of ordered){
-      if(previous && sameEvolutionFamily(candidate,previous)) continue;
-      const biomes=dailyBiomeKeys(candidate);
-      if(previousBiomes.size && biomes.size && [...biomes].some(b=>previousBiomes.has(b))) continue;
-      dailyEntryCache.set(key,candidate);
-      return candidate;
-    }
-    const fallback=ordered[0]||null;
-    dailyEntryCache.set(key,fallback);
-    return fallback;
+    let h=0; for(let i=0;i<key.length;i++)h=(h*31+key.charCodeAt(i))>>>0;
+    const entry=list[h%list.length]||null;
+    dailyEntryCache.set(key,entry);
+    return entry;
   };
   function dailyHistoryStatus(key, entry){
     const today=dailyDateKey(), ds=dailyStats();
@@ -352,54 +250,6 @@
     if(ds.history && Object.prototype.hasOwnProperty.call(ds.history,key)) return ds.history[key]?'complete':'missed';
     if(ds.firstDate && compareDateKey(key,ds.firstDate)>=0) return 'missed';
     return 'untracked';
-  }
-  function formatActivity(a){
-    const t=new Date(a.ts).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
-    const entry=a.entryId?entries.find(e=>e.id===a.entryId):null;
-    const name=a.name||entry?.name||'';
-    let text=a.type;
-    if(a.type==='caught') text='Caught '+name;
-    else if(a.type==='uncaught') text='Marked '+name+' as missing';
-    else if(a.type==='favorite') text='Added '+name+' to favorites';
-    else if(a.type==='unfavorite') text='Removed '+name+' from favorites';
-    else if(a.type==='team_add') text='Added '+name+' to team';
-    else if(a.type==='team_remove') text='Removed '+name+' from team';
-    else if(a.type==='training_complete') text='Completed '+(modeNames[a.mode]||'Training')+' ('+(a.score||0)+'/'+(a.total||10)+')';
-    else if(a.type==='daily_complete') text='Completed Daily Dex'+(name?' ('+name+')':'');
-    else if(a.type==='daily_uncomplete') text='Daily Dex completion undone'+(name?' ('+name+')':'');
-    return {time:t,text,entry};
-  }
-  function openDailyDay(key){
-    const entry=dailyEntryForDate(key), status=dailyHistoryStatus(key,entry), acts=activitiesForDate(key).map(formatActivity);
-    const dateText=new Intl.DateTimeFormat('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'}).format(new Date(key+'T12:00:00'));
-    if(status==='future'){
-      const wrap=document.createElement('div');
-      wrap.className='daily-detail-overlay';
-      wrap.innerHTML='<div class="daily-detail-modal"><button class="info-close" data-close>×</button><div class="eyebrow">CATCH CALENDAR</div><h2>'+escHtml(dateText)+'</h2><div class="daily-detail-future"><span>?</span><b>Not yet available</b><small>This day is still in the future.</small></div></div>';
-      document.body.appendChild(wrap);
-      wrap.querySelector('[data-close]').onclick=()=>wrap.remove();
-      wrap.addEventListener('click',e=>{if(e.target===wrap)wrap.remove();});
-      return;
-    }
-    const wrap=document.createElement('div');
-    wrap.className='daily-detail-overlay';
-    const statusText=status==='complete'?'✓ Completed':status==='today'?'Today':'× Missed';
-    const challengeText=status==='complete'?'Challenge completed':status==='today'?'Today’s challenge':'Challenge missed';
-    const activityHtml=acts.map(a=>'<div class="daily-activity-row"><time>'+escHtml(a.time)+'</time><span>'+escHtml(a.text)+'</span>'+(a.entry?'<button class="daily-activity-open" data-entry="'+escHtml(a.entry.id)+'">View</button>':'')+'</div>').join('')||'<div class="empty-panel">No recorded activity for this day.</div>';
-    wrap.innerHTML='<div class="daily-detail-modal"><button class="info-close" data-close>×</button><div class="daily-detail-head"><div><div class="eyebrow">CATCH CALENDAR • '+escHtml(key)+'</div><h2>'+escHtml(entry?.name||'Daily Dex')+'</h2><span class="daily-detail-status '+status+'">'+statusText+'</span></div>'+(entry?'<button class="secondary" id="dailyDetailPokemon">View Pokémon</button>':'')+'</div><div class="daily-detail-pokemon">'+(entry?'<img src="'+spritePath(entry)+'" alt="'+escHtml(entry.name)+'">':'')+'<div><b>'+challengeText+'</b><small>'+acts.length+' recorded '+(acts.length===1?'activity':'activities')+' on this day.</small></div></div><section class="daily-activity-section"><div class="section-heading"><div><span class="eyebrow">ACTIVITY</span><h3>What you did that day</h3></div></div><div class="daily-activity-list">'+activityHtml+'</div></section></div>';
-    document.body.appendChild(wrap);
-    wrap.querySelector('[data-close]').onclick=()=>wrap.remove();
-    wrap.addEventListener('click',e=>{if(e.target===wrap)wrap.remove();});
-    wrap.querySelector('#dailyDetailPokemon')?.addEventListener('click',()=>{if(!entry)return;wrap.remove();openInfo(entry.id);});
-    wrap.querySelectorAll('[data-entry]').forEach(b=>b.onclick=()=>{wrap.remove();openInfo(b.dataset.entry);});
-  }
-  let dailyCountdownTimer=null;
-  function nextDailyTimestamp(){ const now=new Date(); const next=new Date(now); next.setHours(24,0,0,0); return next.getTime(); }
-  function formatCountdown(ms){ const total=Math.max(0,Math.floor(ms/1000)); const h=Math.floor(total/3600), m=Math.floor((total%3600)/60), sec=total%60; return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`; }
-  function startDailyCountdown(){
-    clearInterval(dailyCountdownTimer);
-    const tick=()=>{ const el=document.querySelector('[data-daily-countdown]'); if(!el)return; const left=nextDailyTimestamp()-Date.now(); if(left<=0){clearInterval(dailyCountdownTimer);renderDailyDex();return;} el.textContent=formatCountdown(left); };
-    tick(); dailyCountdownTimer=setInterval(tick,1000);
   }
   function renderDailyDex(){
     syncDailyCompletion();
@@ -430,8 +280,8 @@
     const firstTracked=ds.firstDate;
     $('#view').innerHTML=`<div class="page-card daily-calendar-page">
       <div class="daily-calendar-hero">
-        <div><div class="eyebrow">CATCH CALENDAR</div><h2>Catch Calendar</h2><p>One Pokémon every day. Keep the chain alive and build your streak.</p></div>
-        <div class="daily-hero-actions"><div class="daily-next-card"><span>⏱ NEXT CATCH</span><strong data-daily-countdown>00:00:00</strong><small>New challenge at midnight</small></div><div class="daily-streak-hero"><span>🔥 Current streak</span><strong>${Number(ds.streak||0)}</strong><small>Best ${Number(ds.bestStreak||0)} days</small></div></div>
+        <div><div class="eyebrow">DAILY DEX</div><h2>Daily Dex</h2><p>One Pokémon every day. Keep the chain alive and build your streak.</p></div>
+        <div class="daily-streak-hero"><span>🔥 Current streak</span><strong>${Number(ds.streak||0)}</strong><small>Best ${Number(ds.bestStreak||0)} days</small></div>
       </div>
       <section class="daily-calendar-panel">
         <div class="daily-month-bar"><button class="secondary daily-month-btn" id="dailyPrevMonth" aria-label="Previous month">←</button><div><span class="eyebrow">MONTHLY JOURNAL</span><h3>${monthName(y,m)}</h3><p>${monthComplete} completed · ${monthMissed} missed${monthPending?' · today pending':''}</p></div><button class="secondary daily-month-btn" id="dailyNextMonth" aria-label="Next month">→</button></div>
@@ -440,10 +290,10 @@
         <div class="daily-calendar-grid">${cells.join('')}</div>
       </section>
       <section class="daily-insight-grid">
-        <article><span class="eyebrow">TOTAL COMPLETED</span><strong>${Number(ds.totalCompleted||0)}</strong><small>Catch Calendar days completed</small></article>
+        <article><span class="eyebrow">TOTAL COMPLETED</span><strong>${Number(ds.totalCompleted||0)}</strong><small>Daily Dex days completed</small></article>
         <article><span class="eyebrow">THIS MONTH</span><strong>${totalDays ? Math.round(monthComplete/Math.max(1,monthComplete+monthMissed+monthPending)*100) : 0}%</strong><small>${monthComplete} completed days</small></article>
         <article><span class="eyebrow">BEST STREAK</span><strong>${Number(ds.bestStreak||0)}</strong><small>Longest consecutive streak</small></article>
-        <article><span class="eyebrow">TRACKING SINCE</span><strong>${firstTracked?new Intl.DateTimeFormat('en-GB',{day:'numeric',month:'short',year:'numeric'}).format(new Date(`${firstTracked}T12:00:00`)):'Today'}</strong><small>Your Catch Calendar journey</small></article>
+        <article><span class="eyebrow">TRACKING SINCE</span><strong>${firstTracked?new Intl.DateTimeFormat('en-GB',{day:'numeric',month:'short',year:'numeric'}).format(new Date(`${firstTracked}T12:00:00`)):'Today'}</strong><small>Your Daily Dex journey</small></article>
       </section>
     </div>`;
     const firstMonthIndex=firstAvailableMonth.getFullYear()*12+firstAvailableMonth.getMonth();
@@ -463,14 +313,7 @@
       if(dailyCalendarMonth>11){dailyCalendarMonth=0;dailyCalendarYear++;}
       renderDailyDex();
     });
-    $$('[data-daily-date]').forEach(b=>b.addEventListener('click',(ev)=>{
-      const key=b.dataset.dailyDate, entry=dailyEntryForDate(key);
-      if(ev.target.closest('.daily-day-art, .daily-day-art img')){ ev.preventDefault(); ev.stopPropagation(); if(entry) openInfo(entry.id); return; }
-      openDailyDay(key);
-    }));
-    // The current challenge artwork on the calendar/progress surfaces opens the same rich info menu.
-    $('#dailyDexView')?.addEventListener('click',()=>{const entry=dailyDexEntry(); if(entry) openInfo(entry.id);});
-    startDailyCountdown();
+    $$('[data-daily-date]').forEach(b=>b.addEventListener('click',()=>{const e=dailyEntryForDate(b.dataset.dailyDate);if(e)openInfo(e.id);}));
   }
   function renderProgressPlus(){
     syncDailyCompletion();
@@ -485,11 +328,11 @@
     $('#view').innerHTML=`<div class="page-card progress-plus v14-progress">
       <div class="achievement-hero"><div><div class="eyebrow">COLLECTION DASHBOARD</div><h2>Progress</h2><p>${escHtml(greetingName())}'s complete LivingDex overview.</p></div><div class="achievement-total"><strong>${s.mainCaught}</strong><span>/ ${s.mainTotal} main caught</span><i style="width:${pct(s.mainCaught,s.mainTotal)}%"></i></div></div>
       <section class="progress-stat-grid"><div><b>${s.caught}</b><span>Total caught</span></div><div><b>${s.missing}</b><span>Total missing</span></div><div><b>${pct(s.caught,s.total)}%</b><span>Total complete</span></div><div><b>${s.favoriteCount}</b><span>Favorites</span></div><div><b>${s.fullBoxes}</b><span>Full boxes</span></div><div class="stat-accent"><b>${d.streak||0}</b><span>Daily streak</span></div></section>
-      <section class="daily-dex-card ${dailyDone?'daily-complete':''}"><div class="daily-dex-art">${daily?`<img src="${spritePath(daily)}" alt="${escHtml(daily.name)}">`:''}</div><div class="daily-dex-copy"><span class="eyebrow">CATCH CALENDAR • ${escHtml(dailyDateKey())}</span><h3>${daily?escHtml(daily.name):'Catch Calendar'}</h3><p>${dailyDone?'Completed today. Keep the streak alive tomorrow.':'Complete today’s Catch Calendar by having this Pokémon in your collection.'}</p><div class="daily-meta"><span class="daily-status">${dailyDone?'✓ Completed today':'○ Not completed today'}</span><span>🔥 ${d.streak||0} day streak</span><span>Best ${d.bestStreak||0}</span></div></div><button id="dailyDexView" class="secondary" ${daily?'':'disabled'}>View Pokémon</button></section>
+      <section class="daily-dex-card ${dailyDone?'daily-complete':''}"><div class="daily-dex-art">${daily?`<img src="${spritePath(daily)}" alt="${escHtml(daily.name)}">`:''}</div><div class="daily-dex-copy"><span class="eyebrow">DAILY DEX • ${escHtml(dailyDateKey())}</span><h3>${daily?escHtml(daily.name):'Daily Dex'}</h3><p>${dailyDone?'Completed today. Keep the streak alive tomorrow.':'Complete today’s Daily Dex by having this Pokémon in your collection.'}</p><div class="daily-meta"><span class="daily-status">${dailyDone?'✓ Completed today':'○ Not completed today'}</span><span>🔥 ${d.streak||0} day streak</span><span>Best ${d.bestStreak||0}</span></div></div><button id="dailyDexView" class="secondary" ${daily?'':'disabled'}>View Pokémon</button></section>
       <section class="achievement-section"><div class="section-heading"><div><span class="eyebrow">GENERATIONS</span><h3>Generation completion</h3></div><span class="section-note">${generations.filter(x=>x.got===x.total).length} / ${generations.length} complete</span></div><div class="progress-grid generation-progress">${generations.map(x=>`<article class="progress-card ${x.got===x.total?'progress-complete':''}"><div class="progress-card-top"><span>Generation ${generationName(x.g)}</span><strong>${x.got} / ${x.total}</strong></div><div class="progress-track"><i style="width:${x.p}%"></i></div><small>${x.p}% complete</small></article>`).join('')}</div></section>
       <section class="achievement-section"><div class="section-heading"><div><span class="eyebrow">TYPES</span><h3>Completion per type</h3></div><span class="section-note">${types.filter(x=>x.got===x.total).length} / ${types.length} complete</span></div><div class="progress-grid type-progress">${types.map(x=>`<article class="progress-card ${x.got===x.total?'progress-complete':''}"><div class="progress-card-top"><span class="knowledge-chip mini" style="${typeStyle(x.t)}">${escHtml(typeLabel(x.t))}</span><strong>${x.got} / ${x.total}</strong></div><div class="progress-track"><i style="width:${x.p}%"></i></div><small>${x.p}% complete</small></article>`).join('')}</div></section>
       <section class="achievement-section"><div class="section-heading"><div><span class="eyebrow">SPECIAL COLLECTIONS</span><h3>Special forms</h3></div></div><div class="progress-grid special-progress">${special.map(x=>`<article class="progress-card ${x.got===x.total?'progress-complete':''}"><div class="progress-card-top"><span>${escHtml(x.name)}</span><strong>${x.got} / ${x.total}</strong></div><div class="progress-track"><i style="width:${x.p}%"></i></div><small>${x.p}% complete</small></article>`).join('')}</div></section>
-      <section class="progress-footer-grid"><article class="progress-summary-card"><div class="summary-icon">🏅</div><div><span class="eyebrow">MILESTONES</span><h3>${unlocked} / ${milestones.length} badges earned</h3><p>Badges for collection, Catch Calendar and Training achievements.</p></div><button id="progressMilestones" class="secondary">View Milestones</button></article><article class="progress-summary-card"><div class="summary-icon">◎</div><div><span class="eyebrow">TRAINING</span><h3>${escHtml(s.training.rank)} Rank</h3><p>${s.training.totalQuestions} questions · ${s.training.accuracy}% accuracy · best ${s.training.bestScore}/10</p></div><button id="progressTraining" class="secondary">Open Training</button></article></section>
+      <section class="progress-footer-grid"><article class="progress-summary-card"><div class="summary-icon">🏅</div><div><span class="eyebrow">MILESTONES</span><h3>${unlocked} / ${milestones.length} badges earned</h3><p>Badges for collection, Daily Dex and Training achievements.</p></div><button id="progressMilestones" class="secondary">View Milestones</button></article><article class="progress-summary-card"><div class="summary-icon">◎</div><div><span class="eyebrow">TRAINING</span><h3>${escHtml(s.training.rank)} Rank</h3><p>${s.training.totalQuestions} questions · ${s.training.accuracy}% accuracy · best ${s.training.bestScore}/10</p></div><button id="progressTraining" class="secondary">Open Training</button></article></section>
     </div>`;
     $('#dailyDexView')?.addEventListener('click',()=>daily&&openInfo(daily.id));
     $('#progressMilestones')?.addEventListener('click',()=>window.LivingDexNavigate?.('milestones'));
@@ -500,7 +343,7 @@
     const generations=Array.from({length:9},(_,i)=>i+1).map(g=>{const list=main.filter(e=>genFor(e)===g),got=list.filter(e=>state[e.id]).length;return {g,total:list.length,got};}).filter(x=>x.total);
     const types=TYPES.map(t=>{const list=main.filter(e=>entryTypes(e).includes(t)),got=list.filter(e=>state[e.id]).length;return {t,total:list.length,got};}).filter(x=>x.total);
     const s=collectionStats(), ms=milestoneDefinitions({...s,generations,types}), unlocked=ms.filter(m=>m.unlocked).length;
-    $('#view').innerHTML=`<div class="page-card online-page milestones-page v14-page"><div class="achievement-hero"><div><div class="eyebrow">BADGE COLLECTION</div><h2>Milestones</h2><p>Earn rewards through your LivingDex, Catch Calendar missions and Training.</p></div><div class="achievement-total"><strong>${unlocked}</strong><span>/ ${ms.length} earned</span><i style="width:${pct(unlocked,ms.length)}%"></i></div></div><div class="milestone-grid v14-milestones">${ms.map(m=>`<article class="milestone-badge ${m.unlocked?'unlocked':''}"><div class="badge-art"><img src="${escHtml(m.asset)}" alt="${escHtml(m.name)}"></div><div><b>${escHtml(m.name)}</b><p>${escHtml(m.desc)}</p></div><span class="badge-state">${m.unlocked?'EARNED':'LOCKED'}</span></article>`).join('')}</div></div>`;
+    $('#view').innerHTML=`<div class="page-card online-page milestones-page v14-page"><div class="achievement-hero"><div><div class="eyebrow">BADGE COLLECTION</div><h2>Milestones</h2><p>Earn badges through collection, Daily Dex and Training achievements.</p></div><div class="achievement-total"><strong>${unlocked}</strong><span>/ ${ms.length} earned</span><i style="width:${pct(unlocked,ms.length)}%"></i></div></div><div class="milestone-grid v14-milestones">${ms.map(m=>`<article class="milestone-badge ${m.unlocked?'unlocked':''}"><div class="badge-art">${escHtml(m.icon)}</div><div><b>${escHtml(m.name)}</b><p>${escHtml(m.desc)}</p></div><span class="badge-state">${m.unlocked?'EARNED':'LOCKED'}</span></article>`).join('')}</div></div>`;
   }
   // Training hub and quizzes.
   const shuffle=a=>a.slice().sort(()=>Math.random()-.5);
@@ -561,37 +404,38 @@
     overlay.innerHTML=`<div class="training-modal"><button class="info-close" id="trainingClose">×</button><div class="eyebrow">TRAINING</div><h2 id="trainingTitle"></h2><div class="quiz-score"><span>Score <b id="trainingScore">0</b></span><span>Streak <b id="trainingStreak">0</b></span><span>Question <b id="trainingNumber">1</b>/10</span></div><div id="trainingQuestion"></div><div id="trainingFeedback" class="quiz-feedback"></div><button id="trainingNext" class="primary" hidden>Next question</button></div>`;
     document.body.appendChild(overlay); $('#trainingClose').onclick=()=>overlay.remove(); overlay.onclick=e=>{if(e.target===overlay)overlay.remove();}; $('#trainingNext').onclick=draw;
     function draw(){
-      if(trainingSession.total>=10){finish();return;} trainingSession.q=trainingQuestion(mode);trainingSession.questionStartedAt=Date.now();trainingSession.answered=false;const q=trainingSession.q;
+      if(trainingSession.total>=10){finish();return;} trainingSession.q=trainingQuestion(mode);trainingSession.answered=false;const q=trainingSession.q;
       $('#trainingTitle').textContent={who:"Who's That Pokémon?",type:'Type Learner',evolution:'Evolution Training',pokedex:'Pokédex Training',generation:'Generation Training'}[mode];
-      const art=mode==='who'?`<div class="training-art"><img loading="lazy" decoding="async" src="${spritePath(q.e)}"></div>`:mode==='evolution'?`<div class="training-target evolution-target"><div class="evolution-target-art"><img loading="lazy" decoding="async" src="${spritePath(q.e)}"><span>Target Pokémon</span></div><div><b>${escHtml(q.e.name)}</b><small>${escHtml(q.prompt)}</small></div></div>`:`<div class="training-target"><img loading="lazy" decoding="async" src="${spritePath(q.e)}"><div><b>${escHtml(q.prompt)}</b></div></div>`;
+      const art=mode==='who'?`<div class="training-art"><img src="${spritePath(q.e)}"></div>`:mode==='evolution'?`<div class="training-target evolution-target"><div class="evolution-target-art"><img src="${spritePath(q.e)}"><span>Target Pokémon</span></div><div><b>${escHtml(q.e.name)}</b><small>${escHtml(q.prompt)}</small></div></div>`:`<div class="training-target"><img src="${spritePath(q.e)}"><div><b>${escHtml(q.prompt)}</b></div></div>`;
       $('#trainingQuestion').innerHTML=`${art}<div class="quiz-prompt">${mode==='who'?'':escHtml(q.prompt)}</div><div class="quiz-choices">${q.choices.map(c=>`<button class="quiz-choice" data-answer="${escHtml(c)}">${escHtml(mode==='type'?typeLabel(c):mode==='generation'?`Generation ${generationName(Number(c))}`:c)}</button>`).join('')}</div>`;
       $('#trainingFeedback').textContent='';$('#trainingNext').hidden=true;$('#trainingNumber').textContent=trainingSession.total+1;
       $$('#trainingQuestion .quiz-choice').forEach(b=>b.onclick=()=>answer(b));
     }
-    function answer(btn){if(trainingSession.answered)return;trainingSession.answered=true;trainingSession.total++;const elapsed=Math.max(0,Date.now()-(trainingSession.questionStartedAt||Date.now()));trainingSession.totalTimeMs=(trainingSession.totalTimeMs||0)+elapsed;trainingSession.times=(trainingSession.times||[]);trainingSession.times.push(elapsed);trainingSession.bestTimeMs=trainingSession.bestTimeMs==null?elapsed:Math.min(trainingSession.bestTimeMs,elapsed);if(elapsed<5000)trainingSession.fastAnswers=(trainingSession.fastAnswers||0)+1;const ok=btn.dataset.answer===String(trainingSession.q.correct);if(ok){trainingSession.score++;trainingSession.streak++;btn.classList.add('correct');}else{trainingSession.streak=0;btn.classList.add('wrong');$$('#trainingQuestion .quiz-choice').forEach(b=>{if(b.dataset.answer===String(trainingSession.q.correct))b.classList.add('correct');});}$('#trainingScore').textContent=trainingSession.score;$('#trainingStreak').textContent=trainingSession.streak;$('#trainingFeedback').textContent=ok?`${assistantName()}: Correct!`:`${assistantName()}: The answer was ${mode==='type'?typeLabel(trainingSession.q.correct):mode==='generation'?`Generation ${generationName(Number(trainingSession.q.correct))}`:trainingSession.q.correct}.`;$('#trainingNext').textContent=trainingSession.total>=10?'Finish':'Next question';$('#trainingNext').hidden=false;}
-    function finish(){const key=mode;trainingStats[key]??={questions:0,correct:0,best:0};const ss=trainingStats[key];ss.questions+=trainingSession.total;ss.correct+=trainingSession.score;ss.best=Math.max(ss.best||0,trainingSession.score);ss.totalTimeMs=Number(ss.totalTimeMs||0)+Number(trainingSession.totalTimeMs||0);ss.timedQuestions=Number(ss.timedQuestions||0)+Number(trainingSession.total||0);ss.bestTimeMs=ss.bestTimeMs==null?trainingSession.bestTimeMs:Math.min(Number(ss.bestTimeMs),Number(trainingSession.bestTimeMs));ss.bestSessionTimeMs=ss.bestSessionTimeMs==null?Number(trainingSession.totalTimeMs||0):Math.min(Number(ss.bestSessionTimeMs),Number(trainingSession.totalTimeMs||0));trainingStats.__trainingSessions=Number(trainingStats.__trainingSessions||0)+1;trainingStats.__fastAnswers=Number(trainingStats.__fastAnswers||0)+Number(trainingSession.fastAnswers||0);trainingStats.__totalTimeMs=Number(trainingStats.__totalTimeMs||0)+Number(trainingSession.totalTimeMs||0);trainingStats.__timedQuestions=Number(trainingStats.__timedQuestions||0)+Number(trainingSession.total||0);trainingStats.__bestTimeMs=trainingStats.__bestTimeMs==null?trainingSession.bestTimeMs:Math.min(Number(trainingStats.__bestTimeMs),Number(trainingSession.bestTimeMs));trainingStats.__bestSessionTimeMs=trainingStats.__bestSessionTimeMs==null?Number(trainingSession.totalTimeMs||0):Math.min(Number(trainingStats.__bestSessionTimeMs),Number(trainingSession.totalTimeMs||0));if(trainingSession.score===10)trainingStats.__perfectSessions=Number(trainingStats.__perfectSessions||0)+1;recordActivity('training_complete',{mode,score:trainingSession.score,total:trainingSession.total});saveTraining();overlay.remove();renderTraining();}
+    function answer(btn){if(trainingSession.answered)return;trainingSession.answered=true;trainingSession.total++;const ok=btn.dataset.answer===String(trainingSession.q.correct);if(ok){trainingSession.score++;trainingSession.streak++;btn.classList.add('correct');}else{trainingSession.streak=0;btn.classList.add('wrong');$$('#trainingQuestion .quiz-choice').forEach(b=>{if(b.dataset.answer===String(trainingSession.q.correct))b.classList.add('correct');});}$('#trainingScore').textContent=trainingSession.score;$('#trainingStreak').textContent=trainingSession.streak;$('#trainingFeedback').textContent=ok?`${assistantName()}: Correct!`:`${assistantName()}: The answer was ${mode==='type'?typeLabel(trainingSession.q.correct):mode==='generation'?`Generation ${generationName(Number(trainingSession.q.correct))}`:trainingSession.q.correct}.`;$('#trainingNext').textContent=trainingSession.total>=10?'Finish':'Next question';$('#trainingNext').hidden=false;}
+    function finish(){const key=mode;trainingStats[key]??={questions:0,correct:0,best:0};trainingStats[key].questions+=trainingSession.total;trainingStats[key].correct+=trainingSession.score;trainingStats[key].best=Math.max(trainingStats[key].best,trainingSession.score);saveTraining();overlay.remove();renderTraining();}
     draw();
   }
   function renderTraining(){
     const labels={who:["Who's That Pokémon?",'Identify Pokémon from their sprite.'],type:['Type Learner','Learn weaknesses, resistances and super-effective matchups.'],evolution:['Evolution Training','Practice evolution relationships.'],pokedex:['Pokédex Training','Learn numbers and LivingDex order.'],generation:['Generation Training','Practice which generation each Pokémon belongs to.']};
     const sum=trainingSummary();
-    const cards=Object.entries(labels).map(([k,v])=>{const ss=trainingStats[k]||{};const acc=ss.questions?pct(ss.correct||0,ss.questions):0;return `<article class="training-card"><div class="training-card-icon">${{who:'?',type:'T',evolution:'↗',pokedex:'#',generation:'G'}[k]}</div><div><div class="eyebrow">TRAINING</div><h3>${v[0]}</h3><p>${v[1]}</p><div class="training-statline"><span>Best <b>${ss.best||0}/10</b></span><span>Accuracy <b>${acc}%</b></span><span>Questions <b>${ss.questions||0}</b></span><span>Avg <b>${ss.timedQuestions?((ss.totalTimeMs/ss.timedQuestions)/1000).toFixed(2)+'s':'—'}</b></span><span>Best Time <b>${ss.bestTimeMs!=null?(ss.bestTimeMs/1000).toFixed(2)+'s':'—'}</b></span><span>Rank <b>${trainingSummaryFrom(trainingStats).modeSummary?.[k]?.accuracy>=95?'Master':trainingSummaryFrom(trainingStats).modeSummary?.[k]?.accuracy>=85?'Platinum':trainingSummaryFrom(trainingStats).modeSummary?.[k]?.accuracy>=75?'Gold':trainingSummaryFrom(trainingStats).modeSummary?.[k]?.accuracy>=60?'Silver':'Bronze'}</b></span></div></div><button class="primary training-start" data-training="${k}">Start</button></article>`;}).join('');
-    $('#view').innerHTML=`<div class="page-card training-page v14-training"><div class="page-title"><div><div class="eyebrow">TRAINER SCHOOL</div><h2>Training</h2><p>Test your Pokémon knowledge and build your skills.</p></div><div class="training-rank-card"><span class="eyebrow">TRAINING RANK</span><strong>${sum.rank}</strong><small>${sum.totalCorrect} correct · ${sum.accuracy}% accuracy</small></div></div><div class="training-overview-grid"><div><b>${sum.totalQuestions}</b><span>Questions answered</span></div><div><b>${sum.totalCorrect}</b><span>Correct answers</span></div><div><b>${sum.accuracy}%</b><span>Overall accuracy</span></div><div><b>${sum.bestScore}/10</b><span>Best score</span></div><div><b>${sum.perfectModes}</b><span>Perfect modes</span></div><div><b>${sum.totalSessions}</b><span>Sessions</span></div><div><b>${sum.fastAnswers}</b><span>Fast answers</span></div><div><b>${trainingStats.__timedQuestions?((trainingStats.__totalTimeMs/trainingStats.__timedQuestions)/1000).toFixed(2)+'s':'—'}</b><span>Average time</span></div><div><b>${trainingStats.__bestTimeMs!=null?(trainingStats.__bestTimeMs/1000).toFixed(2)+'s':'—'}</b><span>Fastest answer</span></div></div><div class="training-grid">${cards}</div></div>`;
-        $$('.training-start').forEach(b=>b.onclick=()=>startTraining(b.dataset.training));
+    const cards=Object.entries(labels).map(([k,v])=>{const ss=trainingStats[k]||{};const acc=ss.questions?pct(ss.correct||0,ss.questions):0;return `<article class="training-card"><div class="training-card-icon">${{who:'?',type:'T',evolution:'↗',pokedex:'#',generation:'G'}[k]}</div><div><div class="eyebrow">TRAINING</div><h3>${v[0]}</h3><p>${v[1]}</p><div class="training-statline"><span>Best <b>${ss.best||0}/10</b></span><span>Accuracy <b>${acc}%</b></span><span>Questions <b>${ss.questions||0}</b></span></div></div><button class="primary training-start" data-training="${k}">Start</button></article>`;}).join('');
+    $('#view').innerHTML=`<div class="page-card training-page v14-training"><div class="page-title"><div><div class="eyebrow">TRAINER SCHOOL</div><h2>Training</h2><p>Test your Pokémon knowledge and build your skills.</p></div><div class="training-rank-card"><span class="eyebrow">TRAINING RANK</span><strong>${sum.rank}</strong><small>${sum.totalCorrect} correct answers</small></div></div><div class="training-overview-grid"><div><b>${sum.totalQuestions}</b><span>Questions answered</span></div><div><b>${sum.totalCorrect}</b><span>Correct answers</span></div><div><b>${sum.accuracy}%</b><span>Overall accuracy</span></div><div><b>${sum.bestScore}/10</b><span>Best score</span></div><div><b>${sum.perfectModes}</b><span>Perfect modes</span></div></div><div class="training-grid">${cards}</div></div>`;
+    $$('.training-start').forEach(b=>b.onclick=()=>startTraining(b.dataset.training));
   }
-  // Type Knowledge is now reference-only. Quiz lives under Training.
+
+  // Type Information is now reference-only. Quiz lives under Training.
   window.renderTypeKnowledge = function(){
     const selected=window.knowledgeTypes||[]; const q=norm(window.knowledgeQuery||''); const shown=TYPES.filter(t=>!q||norm(typeLabel(t)).includes(q)).slice(0,20); const defTypes=selected.length?selected:['Fire'];
     const rows=TYPES.map(t=>({type:t,m:effectiveness(defTypes,t)})); const weak=rows.filter(x=>x.m>1), resist=rows.filter(x=>x.m>0&&x.m<1), immune=rows.filter(x=>x.m===0);
     const chips=a=>a.map(x=>`<span class="knowledge-chip" style="${typeStyle(x.type)}">${escHtml(typeLabel(x.type))}<small>${x.m===0?'×0':x.m>=4?`${x.m}×`:x.m>1?'×2':x.m<1?'×½':'×1'}</small></span>`).join('')||'<span class="muted-dash">None</span>';
-    $('#view').innerHTML=`<div class="page-card knowledge-page"><div class="page-title"><div><div class="eyebrow">TYPE DATABASE</div><h2>Type Knowledge</h2><p>Study exact type matchups. Training quizzes are now under Training.</p></div></div><div class="knowledge-selector"><div class="knowledge-search"><span>⌕</span><input id="knowledgeSearch" value="${escHtml(q)}" placeholder="Search types..."></div><div class="knowledge-selected-row">${selected.map(t=>`<button class="knowledge-selected" data-remove-type="${t}" style="${typeStyle(t)}">${escHtml(typeLabel(t))} ×</button>`).join('')||'<span class="selector-hint">Select up to two types</span>'}</div><div class="knowledge-options">${shown.map(t=>`<button class="knowledge-option ${selected.includes(t)?'selected':''}" data-add-type="${t}" style="${typeStyle(t)}">${escHtml(typeLabel(t))}</button>`).join('')}</div></div><div class="knowledge-hero">${defTypes.map(t=>`<span class="big-type" style="${typeStyle(t)}">${escHtml(typeLabel(t))}</span>`).join('<span class="combo-slash">/</span>')}<div><span class="eyebrow">DEFENSIVE PROFILE</span><h3>${escHtml(defTypes.map(typeLabel).join(' / '))}</h3><p>How attacking types interact with this combination.</p></div></div><div class="knowledge-columns"><section class="knowledge-panel offensive"><div class="panel-heading"><div><span class="eyebrow">ATTACKING</span><h3>Super effective</h3></div></div><div class="chip-cloud">${chips(weak)}</div><div class="knowledge-sub"><h4>Not very effective</h4><div class="chip-cloud">${chips(resist)}</div></div><div class="knowledge-sub"><h4>No effect</h4><div class="chip-cloud">${chips(immune)}</div></div></section><section class="knowledge-panel defensive"><div class="panel-heading"><div><span class="eyebrow">MULTIPLIERS</span><h3>Full matchup</h3></div></div><div class="type-multiplier-grid">${rows.map(x=>`<div class="type-multiplier"><span class="knowledge-chip mini" style="${typeStyle(x.type)}">${escHtml(typeLabel(x.type))}</span><strong>${x.m===0?'×0':x.m===1?'×1':x.m+'×'}</strong></div>`).join('')}</div></section></div></div>`;
+    $('#view').innerHTML=`<div class="page-card knowledge-page"><div class="page-title"><div><div class="eyebrow">TYPE DATABASE</div><h2>Type Information</h2><p>Study exact type matchups. Training quizzes are now under Training.</p></div></div><div class="knowledge-selector"><div class="knowledge-search"><span>⌕</span><input id="knowledgeSearch" value="${escHtml(q)}" placeholder="Search types..."></div><div class="knowledge-selected-row">${selected.map(t=>`<button class="knowledge-selected" data-remove-type="${t}" style="${typeStyle(t)}">${escHtml(typeLabel(t))} ×</button>`).join('')||'<span class="selector-hint">Select up to two types</span>'}</div><div class="knowledge-options">${shown.map(t=>`<button class="knowledge-option ${selected.includes(t)?'selected':''}" data-add-type="${t}" style="${typeStyle(t)}">${escHtml(typeLabel(t))}</button>`).join('')}</div></div><div class="knowledge-hero">${defTypes.map(t=>`<span class="big-type" style="${typeStyle(t)}">${escHtml(typeLabel(t))}</span>`).join('<span class="combo-slash">/</span>')}<div><span class="eyebrow">DEFENSIVE PROFILE</span><h3>${escHtml(defTypes.map(typeLabel).join(' / '))}</h3><p>How attacking types interact with this combination.</p></div></div><div class="knowledge-columns"><section class="knowledge-panel offensive"><div class="panel-heading"><div><span class="eyebrow">ATTACKING</span><h3>Super effective</h3></div></div><div class="chip-cloud">${chips(weak)}</div><div class="knowledge-sub"><h4>Not very effective</h4><div class="chip-cloud">${chips(resist)}</div></div><div class="knowledge-sub"><h4>No effect</h4><div class="chip-cloud">${chips(immune)}</div></div></section><section class="knowledge-panel defensive"><div class="panel-heading"><div><span class="eyebrow">MULTIPLIERS</span><h3>Full matchup</h3></div></div><div class="type-multiplier-grid">${rows.map(x=>`<div class="type-multiplier"><span class="knowledge-chip mini" style="${typeStyle(x.type)}">${escHtml(typeLabel(x.type))}</span><strong>${x.m===0?'×0':x.m===1?'×1':x.m+'×'}</strong></div>`).join('')}</div></section></div></div>`;
     $('#knowledgeSearch').oninput=e=>{window.knowledgeQuery=e.target.value;renderTypeKnowledge();};
     $$('[data-add-type]').forEach(b=>b.onclick=()=>{const t=b.dataset.addType;if(selected.includes(t))window.knowledgeTypes=selected.filter(x=>x!==t);else if(selected.length<2)window.knowledgeTypes=[...selected,t];renderTypeKnowledge();});
     $$('[data-remove-type]').forEach(b=>b.onclick=()=>{window.knowledgeTypes=selected.filter(x=>x!==b.dataset.removeType);renderTypeKnowledge();});
   };
 
   window.renderTopNav = function(){
-    const items=[['dex','LivingDex'],['daily','Catch Calendar'],['team','Team Builder'],['types','Type Knowledge'],['training','Training'],['achievements','Progress']];
+    const items=[['dex','LivingDex'],['daily','Daily Dex'],['team','Team Builder'],['types','Type Information'],['training','Training'],['achievements','Progress']];
     $('#topNav').innerHTML=items.map(([k,n])=>`<button class="top-nav-btn ${view===k?'active':''}" data-view="${k}">${n}</button>`).join('');
     $$('.top-nav-btn').forEach(b=>b.onclick=()=>{closeInfo();view=b.dataset.view;renderTopNav();renderView();});
   };
@@ -619,7 +463,7 @@
 
   // Boot V1.1 after the V1.0 app has loaded its data and local state.
   function boot(){
-    document.title='Cobblemon LivingDex — V1.7.1';
+    document.title='Cobblemon LivingDex — V1.5.4';
     // Expose the V1.1/V1.2 views explicitly so the database layer and navigation
     // always call the same implementations.
     window.renderTraining = renderTraining;
@@ -628,19 +472,6 @@
     window.renderMilestones = renderMilestones;
     window.renderDailyDex = renderDailyDex;
     window.__dailyDexEntry = dailyDexEntry;
-    window.recordActivityV17=recordActivity;
-    window.getActivitiesForDateV17=activitiesForDate;
-    window.getCatchHistoryV17=catchHistory;
-    window.getFeaturedBadgesV17=()=>profileMeta().featuredBadges.slice();
-    window.setFeaturedBadgesV17=(ids)=>{profileMeta().featuredBadges=[...new Set(ids||[])].slice(0,5);saveTraining();};
-    window.getProfileMetaV17=()=>({...profileMeta()});
-    window.setProfileMetaV17=(patch={})=>{const m=profileMeta();if(patch.ign!=null)m.ign=String(patch.ign).slice(0,24);if(patch.bio!=null)m.bio=String(patch.bio).slice(0,240);if(patch.banner&&PROFILE_BANNERS[patch.banner])m.banner=patch.banner;saveTraining();};
-    window.getProfileBannersV17=()=>({...PROFILE_BANNERS});
-    let selectedProfileBanner='aurora';
-    window.getSelectedProfileBannerV17=()=>selectedProfileBanner;
-    window.renderProfileBannerChoicesV17=(selected='aurora')=>{selectedProfileBanner=PROFILE_BANNERS[selected]?selected:'aurora';const el=document.querySelector('#profileBannerChoices');if(!el)return;el.innerHTML=Object.entries(PROFILE_BANNERS).map(([id,name])=>`<button type="button" class="profile-banner-choice banner-${id} ${selectedProfileBanner===id?'selected':''}" data-banner-choice="${id}"><span></span><b>${name}</b></button>`).join('');el.querySelectorAll('[data-banner-choice]').forEach(b=>b.onclick=()=>{selectedProfileBanner=b.dataset.bannerChoice;el.querySelectorAll('[data-banner-choice]').forEach(x=>x.classList.toggle('selected',x===b));});};
-    window.getActivityLogV17=()=>activityLog().slice();
-    window.refreshTrainingStateV17=()=>{try{trainingStats=JSON.parse(localStorage.getItem('cobblemon-livingdex-training')||'{}');}catch{trainingStats={};}};
     window.renderTopNav = renderTopNav;
     window.renderView = renderView;
     addBackupControls();
@@ -654,7 +485,6 @@
     // Re-bind navigation with delegation. This prevents an older V1.0 handler
     // from swallowing the new Training/Progress views.
     document.addEventListener('click', e=>{
-      if(window.__LIVINGDEX_DB_NAV_ACTIVE)return;
       const b=e.target.closest?.('.top-nav-btn');
       if(!b)return;
       const target=b.dataset.view;
