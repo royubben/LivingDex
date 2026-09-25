@@ -18,7 +18,6 @@
     <div class="progress"><i id="progressBar"></i></div>
   </div>
   <div class="header-actions">
-    <button id="profileBtn" class="ghost profile-btn">👤 <span>Profile</span></button>
     <button id="resetBtn" class="ghost">Reset collection</button>
     <div class="settings-wrap">
       <button id="settingsBtn" class="ghost settings-btn">⚙ <span id="settingsTitle">Settings</span></button>
@@ -67,18 +66,14 @@
 </div>
 <div id="profileModal" class="profile-modal" hidden>
   <div class="profile-mark">◈</div>
-  <div class="eyebrow">TRAINER PROFILE</div>
-  <h2 id="profileGreeting">Your profile</h2>
-  <p id="profileIntro">Tell me a little about yourself. You can change these answers whenever you want.</p>
-  <div class="profile-form-grid">
-    <div class="profile-field profile-field-full"><label for="trainerName">Display name</label><input id="trainerName" maxlength="24" placeholder="Your name or Trainer"></div>
-    <div class="profile-field profile-field-full"><label for="assistantName">Dex name</label><input id="assistantName" maxlength="24" placeholder="Dex"></div>
-    <div class="profile-field"><label for="favoritePokemon">Favorite Pokémon</label><select id="favoritePokemon"><option value="">Choose a Pokémon</option></select></div>
-    <div class="profile-field"><label for="favoriteType">Favorite type</label><select id="favoriteType"><option value="">Choose a type</option></select></div>
-    <div class="profile-field"><label for="favoriteRegion">Favorite region</label><select id="favoriteRegion"><option value="">Choose a region</option><option>Kanto</option><option>Johto</option><option>Hoenn</option><option>Sinnoh</option><option>Unova</option><option>Kalos</option><option>Alola</option><option>Galar</option><option>Paldea</option></select></div>
-    <div class="profile-field"><label for="favoriteGeneration">Favorite generation</label><select id="favoriteGeneration"><option value="">Choose a generation</option><option value="1">Generation I</option><option value="2">Generation II</option><option value="3">Generation III</option><option value="4">Generation IV</option><option value="5">Generation V</option><option value="6">Generation VI</option><option value="7">Generation VII</option><option value="8">Generation VIII</option><option value="9">Generation IX</option></select></div>
-  </div>
-  <button id="profileContinue" class="primary profile-continue">Save Profile</button>
+  <div class="eyebrow">WELCOME, TRAINER</div>
+  <h2 id="profileGreeting">Before we begin...</h2>
+  <p>Tell me what I should call you, and what you would like to call me.</p>
+  <label for="trainerName">What should I call you?</label>
+  <input id="trainerName" maxlength="24" placeholder="Your name or Trainer">
+  <label for="assistantName">What should you call me?</label>
+  <input id="assistantName" maxlength="24" placeholder="Dex">
+  <button id="profileContinue" class="primary profile-continue">Continue</button>
 </div>
 <div id="typeModal" class="type-modal" hidden>
   <button id="typeModalClose" class="info-close">×</button>

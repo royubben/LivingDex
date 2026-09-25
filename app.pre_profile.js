@@ -44,28 +44,7 @@ function nameParts(e){const[n,...r]=String(e.name||'').split(' — ');return[n,r
 function typeFromSearchToken(x){return TYPE_ALIASES[norm(x).trim()]||null;}
 function parseTypeQuery(q){const parts=String(q).trim().split('/').map(x=>x.trim()).filter(Boolean);if(!parts.length)return null;const ts=parts.map(typeFromSearchToken);return ts.every(Boolean)&&ts.length<=2?ts.length===1?ts:[...new Set(ts)].sort():null;}
 function localSpecies(e){return LOCAL_SPECIES[speciesKeyFromName(e.raw||e.name||'')]||speciesByDex[Number(e.dex)]||null;}
-const entryTypeCache=new Map();
-function entryTypes(e){
-  const key=e?.id||`${e?.dex||''}|${e?.form||''}|${e?.name||''}`;
-  const cached=entryTypeCache.get(key);
-  if(cached)return cached;
-  let result=[];
-  if(e.types?.length){result=e.types.map(t=>String(t).replace(/^./,m=>m.toUpperCase()));}
-  else {
-    const sp=localSpecies(e);
-    if(sp){
-      const f=String(e.form||'').toLowerCase();
-      let form=(sp.forms||[]).find(x=>norm(x.name).replace(/[^a-z0-9]+/g,'')===norm(f).replace(/[^a-z0-9]+/g,''));
-      if(!form&&/alola/i.test(f))form=(sp.forms||[]).find(x=>/alola/i.test(x.name));
-      if(!form&&/hisu/i.test(f))form=(sp.forms||[]).find(x=>/hisu/i.test(x.name));
-      if(!form&&/galar/i.test(f))form=(sp.forms||[]).find(x=>/galar/i.test(x.name));
-      form=form||sp;
-      result=[form.primaryType,form.secondaryType].filter(Boolean).map(x=>String(x).replace(/^./,m=>m.toUpperCase()));
-    }
-  }
-  entryTypeCache.set(key,result);
-  return result;
-}
+function entryTypes(e){if(e.types?.length)return e.types.map(t=>String(t).replace(/^./,m=>m.toUpperCase()));const sp=localSpecies(e);if(!sp)return[];let f=String(e.form||'').toLowerCase();let form=(sp.forms||[]).find(x=>norm(x.name).replace(/[^a-z0-9]+/g,'')===norm(f).replace(/[^a-z0-9]+/g,''));if(!form&&/alola/i.test(f))form=(sp.forms||[]).find(x=>/alola/i.test(x.name));if(!form&&/hisu/i.test(f))form=(sp.forms||[]).find(x=>/hisu/i.test(x.name));if(!form&&/galar/i.test(f))form=(sp.forms||[]).find(x=>/galar/i.test(x.name));form=form||sp;return[form.primaryType,form.secondaryType].filter(Boolean).map(x=>String(x).replace(/^./,m=>m.toUpperCase()));}
 function selectedTypeMatches(e){if(!selectedTypes.length)return true;const got=entryTypes(e).map(String);if(selectedTypes.length===1)return got.includes(selectedTypes[0]);const wanted=[...new Set(selectedTypes)].sort();const actual=[...new Set(got)].sort();return wanted.length===actual.length&&wanted.every((t,i)=>t===actual[i]);}
 function boxSearchEntries(base){const q=norm(query);const tq=parseTypeQuery(query);let matches;if(tq)matches=base.filter(e=>tq.length===1?entryTypes(e).includes(tq[0]):selectedTypeMatchesWith(e,tq));else matches=base.filter(e=>norm(`${e.name} ${e.form} ${e.raw} ${String(e.dex).padStart(3,'0')} #${String(e.dex).padStart(3,'0')}`).includes(q));if(!matches.length)return{items:[],matches:new Set()};const boxes=[...new Set(matches.map(e=>e.box).filter(Boolean))];return{items:tab==='main'||['kanto','johto','hoenn','sinnoh','unova','kalos','alola','galar','paldea'].includes(tab)?base.filter(e=>boxes.includes(e.box)):matches,matches:new Set(matches.map(e=>e.id))};}
 function selectedTypeMatchesWith(e,w){const got=[...new Set(entryTypes(e).map(String))].sort();const wanted=[...new Set(w)].sort();return wanted.length===got.length&&wanted.every((t,i)=>t===got[i]);}
@@ -213,29 +192,10 @@ function renderTabs(){const el=$('#tabSelect');const groups=[['LIVINGDEX',[['mai
 function applySettings(){document.documentElement.lang='en';if($('#brandSubtitle'))$('#brandSubtitle').textContent=localStorage.getItem('cobblemon-livingdex-profile')?`Welcome back, ${greetingName()}`:'Personal collection tracker';document.body.classList.toggle('light-mode',theme==='light');$('#search').placeholder='Search Pokémon, form, type or #number...';$('#resetBtn').textContent='Reset Collection';$$('.filter').forEach(b=>b.textContent=({collected:'✓ Caught',favorites:'★ Favorites'})[b.dataset.status]);$('#typesBtn').textContent='Type Filter';$('#settingsTitle').textContent='Settings';$('#settingsThemeLabel').textContent='Theme';} 
 
 function init(){DATA=EMBEDDED_DATA;entries=allEntries();renderTabs();renderTopNav();applySettings();try{renderView();}catch(err){console.error('LivingDex render error:',err);view='dex';renderDex();}if(!profile)showProfileSetup();else showWelcomeBack();}
-function populateProfileForm(p={}){
-  const trainer=p.trainerName||'';
-  const assistant=p.assistantName||'Dex';
-  $('#trainerName').value=trainer;
-  $('#assistantName').value=assistant;
-  const pokemonSelect=$('#favoritePokemon');
-  if(pokemonSelect){
-    const seen=new Set();
-    const mons=pageEntries('main').filter(e=>!e.form&&e.name&&!seen.has(e.name)&&seen.add(e.name));
-    pokemonSelect.innerHTML='<option value="">Choose a Pokémon</option>'+mons.map(e=>`<option value="${esc(e.name)}">${esc(e.name)}</option>`).join('');
-    pokemonSelect.value=p.favoritePokemon||'';
-  }
-  const typeSelect=$('#favoriteType');
-  if(typeSelect){typeSelect.innerHTML='<option value="">Choose a type</option>'+TYPES.map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join('');typeSelect.value=p.favoriteType||'';}
-  if($('#favoriteRegion'))$('#favoriteRegion').value=p.favoriteRegion||'';
-  if($('#favoriteGeneration'))$('#favoriteGeneration').value=p.favoriteGeneration||'';
-}
-function showProfileSetup(){const modal=$('#profileModal');$('#profileGreeting').textContent='Before we begin...';$('#profileIntro').textContent='Tell me a little about yourself. You can change these answers whenever you want.';populateProfileForm(JSON.parse(localStorage.getItem('cobblemon-livingdex-profile')||'{}'));$('#profileContinue').textContent='Start LivingDex';$('#profileOverlay').hidden=false;modal.hidden=false;document.body.classList.add('modal-open');$('#trainerName').focus();}
-function openProfileOptions(){const p=JSON.parse(localStorage.getItem('cobblemon-livingdex-profile')||'{}');$('#profileGreeting').textContent='Profile Options';$('#profileIntro').textContent='Update your display name, Dex name and personal preferences.';populateProfileForm(p);$('#profileContinue').textContent='Save Profile';$('#profileOverlay').hidden=false;$('#profileModal').hidden=false;document.body.classList.add('modal-open');$('#settingsMenu').classList.remove('open');$('#trainerName').focus();}
-
+function showProfileSetup(){const modal=$('#profileModal');$('#profileOverlay').hidden=false;modal.hidden=false;document.body.classList.add('modal-open');$('#trainerName').focus();} 
 function showWelcomeBack(){const modal=$('#welcomeBackModal'),overlay=$('#welcomeOverlay');if(!modal||!overlay)return;const main=pageEntries('main');const done=main.filter(e=>state[e.id]).length;const pct=main.length?Math.round(done/main.length*100):0;$('#welcomeBackTitle').textContent=`Welcome back, ${greetingName()}!`;$('#welcomeBackText').textContent=`${assistantName()} is ready. Your LivingDex is ${pct}% complete with ${done} of ${main.length} Pokémon caught.`;$('#welcomeProgressText').textContent=pct+'%';$('#welcomeProgressBar').style.width=pct+'%';overlay.hidden=false;modal.hidden=false;document.body.classList.add('modal-open');}
 function closeWelcomeBack(){const modal=$('#welcomeBackModal'),overlay=$('#welcomeOverlay');if(!modal||!overlay)return;overlay.hidden=true;modal.hidden=true;document.body.classList.remove('modal-open');}
 
-function closeProfileSetup(){const trainer=($('#trainerName').value||'Trainer').trim()||'Trainer';const assistant=($('#assistantName').value||'Dex').trim()||'Dex';const previous=JSON.parse(localStorage.getItem('cobblemon-livingdex-profile')||'{}');saveProfile({trainerName:trainer,assistantName:assistant,favoritePokemon:$('#favoritePokemon')?.value||'',favoriteType:$('#favoriteType')?.value||'',favoriteRegion:$('#favoriteRegion')?.value||'',favoriteGeneration:$('#favoriteGeneration')?.value||''});Object.assign(window,{profileReady:true});if($('#brandSubtitle'))$('#brandSubtitle').textContent=`Welcome back, ${trainer}`;$('#profileOverlay').hidden=true;$('#profileModal').hidden=true;document.body.classList.remove('modal-open');renderView();} 
+function closeProfileSetup(){const trainer=($('#trainerName').value||'Trainer').trim()||'Trainer';const assistant=($('#assistantName').value||'Dex').trim()||'Dex';saveProfile({trainerName:trainer,assistantName:assistant});Object.assign(window,{profileReady:true});if($('#brandSubtitle'))$('#brandSubtitle').textContent=`Welcome back, ${trainer}`;$('#profileOverlay').hidden=true;$('#profileModal').hidden=true;document.body.classList.remove('modal-open');renderView();} 
 
-$('#tabSelect').onchange=e=>{closeInfo();tab=e.target.value;page=1;query='';selectedTypes=[];status='all';$('#search').value='';$$('.filter').forEach(x=>x.classList.remove('active'));renderTabs();render();};$('#search').oninput=e=>{closeInfo();query=e.target.value;page=1;render();};$$('.filter').forEach(b=>b.onclick=()=>{status=status===b.dataset.status?'all':b.dataset.status;page=1;$$('.filter').forEach(x=>x.classList.toggle('active',x.dataset.status===status));render();});$('#prev').onclick=()=>{page--;render();};$('#next').onclick=()=>{page++;render();};$('#resetBtn').onclick=()=>{if(confirm('Clear all collected Pokémon?')){Object.keys(state).forEach(k=>delete state[k]);saveAll();render();}};$('#typesBtn').onclick=()=>{$('#typeOverlay').hidden=false;$('#typeModal').hidden=false;renderTypeModal();};$('#typeOverlay').onclick=()=>{$('#typeModal').hidden=true;$('#typeOverlay').hidden=true;};$('#typeModalClose').onclick=()=>{$('#typeModal').hidden=true;$('#typeOverlay').hidden=true;};$('#settingsBtn').onclick=e=>{e.stopPropagation();$('#settingsMenu').classList.toggle('open');};document.addEventListener('click',e=>{if(!e.target.closest('.settings-wrap'))$('#settingsMenu').classList.remove('open');});$('#settingsTheme').onchange=e=>{theme=e.target.value;localStorage.setItem('livingdex-theme',theme);applySettings();};$('#profileContinue').onclick=closeProfileSetup;$('#profileBtn').onclick=e=>{e.stopPropagation();openProfileOptions();};$('#profileOverlay').onclick=e=>e.stopPropagation();$('#welcomeBackContinue').onclick=closeWelcomeBack;$('#welcomeOverlay').onclick=closeWelcomeBack;$('#infoClose').onclick=closeInfo;$('#infoOverlay').onclick=closeInfo;document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeInfo();$('#typeModal').hidden=true;$('#typeOverlay').hidden=true;document.querySelector('.picker-overlay')?.remove();}});init();
+$('#tabSelect').onchange=e=>{closeInfo();tab=e.target.value;page=1;query='';selectedTypes=[];status='all';$('#search').value='';$$('.filter').forEach(x=>x.classList.remove('active'));renderTabs();render();};$('#search').oninput=e=>{closeInfo();query=e.target.value;page=1;render();};$$('.filter').forEach(b=>b.onclick=()=>{status=status===b.dataset.status?'all':b.dataset.status;page=1;$$('.filter').forEach(x=>x.classList.toggle('active',x.dataset.status===status));render();});$('#prev').onclick=()=>{page--;render();};$('#next').onclick=()=>{page++;render();};$('#resetBtn').onclick=()=>{if(confirm('Clear all collected Pokémon?')){Object.keys(state).forEach(k=>delete state[k]);saveAll();render();}};$('#typesBtn').onclick=()=>{$('#typeOverlay').hidden=false;$('#typeModal').hidden=false;renderTypeModal();};$('#typeOverlay').onclick=()=>{$('#typeModal').hidden=true;$('#typeOverlay').hidden=true;};$('#typeModalClose').onclick=()=>{$('#typeModal').hidden=true;$('#typeOverlay').hidden=true;};$('#settingsBtn').onclick=e=>{e.stopPropagation();$('#settingsMenu').classList.toggle('open');};document.addEventListener('click',e=>{if(!e.target.closest('.settings-wrap'))$('#settingsMenu').classList.remove('open');});$('#settingsTheme').onchange=e=>{theme=e.target.value;localStorage.setItem('livingdex-theme',theme);applySettings();};$('#profileContinue').onclick=closeProfileSetup;$('#profileOverlay').onclick=e=>e.stopPropagation();$('#welcomeBackContinue').onclick=closeWelcomeBack;$('#welcomeOverlay').onclick=closeWelcomeBack;$('#infoClose').onclick=closeInfo;$('#infoOverlay').onclick=closeInfo;document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeInfo();$('#typeModal').hidden=true;$('#typeOverlay').hidden=true;document.querySelector('.picker-overlay')?.remove();}});init();

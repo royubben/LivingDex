@@ -1,18 +1,20 @@
-Cobblemon LivingDex V1.36
+Cobblemon LivingDex V1.1 BETA
 
-Base: V1.35 Sprite Fit
+Base: Official V1.0 release
 
-New in V1.36:
-- Achievements renamed to Progress.
-- Type Knowledge renamed to Type Information.
-- Type Information now supports searching/selecting one or two types for dual-type analysis.
-- Type Information includes a Type Quiz with score and streak.
-- Progress cards remain clickable region/special collection filters.
-- Improved Box navigation with a direct box selector.
-- Search now supports Pokédex numbers as well as names/forms/types.
-- Reset Collection and Settings live in the right side of the top bar.
-- Settings includes JSON Export/Import for collection, favorites, notes, team, theme and trainer profile.
-- First launch asks what to call the trainer and the assistant, Pokémon-game/JARVIS style. Stored locally in the browser.
-- Responsive card content scaling uses container-based sizing while preserving the hard 6×5 PC grid.
+V1.1 LivingDex Plus:
+- Pokémon detail screen with larger artwork, metadata, caught/favorite actions and previous/next navigation.
+- Advanced search filters for generation, type, status and collection.
+- Expanded Progress dashboard with generation progress, special collection progress, milestones, trainer level and training statistics.
+- Expanded trainer profile statistics.
+- Save Backup: Export/Import JSON for collection, favorites, notes, team, profile, training statistics and theme.
+- Type Information is now reference-only; the Type Quiz has moved to Training.
+- New Training hub with Who's That Pokémon?, Type Learner, Evolution Training, Pokédex Training and Generation Training.
+- Training sessions use 10 questions with score, streak, best score and accuracy tracking.
+- V1.0 remains the stable baseline; this build is for local testing only.
 
-The 6×5 PC grid is a hard rule and is not changed by responsive sizing.
+Hard rule:
+- LivingDex remains an exact 6 × 5 PC grid (30 slots per box).
+- Responsive sizing never changes the number of columns.
+
+Data is stored locally in the user's browser. Export a save before clearing browser data or moving to another device.
