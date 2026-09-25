@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Cobblemon LivingDex — V1.4.1</title>
-<link rel="stylesheet" href="style.css?v=1.4.1">
+<title>Cobblemon LivingDex — V1.4</title>
+<link rel="stylesheet" href="style.css?v=1.4.0">
 </head>
 <body>
 <header class="topbar">
@@ -92,10 +92,37 @@
   <div id="infoContent"></div>
 </aside>
 <script src="data/cobblemon_local.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="app.js?v=1.4.1"></script>
-<script src="v11.js?v=1.4.1"></script>
-<script src="db-config.js?v=1.4.1"></script>
-<script src="db.js?v=1.4.1"></script>
+<script src="app.js?v=1.4.0"></script>
+<script src="v11.js?v=1.4.0"></script>
+<script src="db-config.js?v=1.4.0"></script>
+<script src="db.js?v=1.4.0"></script>
+<script>
+setTimeout(()=>{
+  try{
+    const daily=window.__dailyDexEntry?.();
+    if(!daily) throw new Error("Daily Dex entry missing");
+    window.state[daily.id]=true; window.saveAll();
+    const saved=JSON.parse(localStorage.getItem("cobblemon-livingdex-state")||"{}");
+    if(!saved[daily.id]) throw new Error("saveAll local persistence failed");
+    window.renderProgressPlus();
+    const progress=document.querySelector("#view")?.innerText||"";
+    if(!progress.includes("DAILY DEX")||!progress.includes("Generation completion")||!progress.includes("Completion per type")) throw new Error("Progress sections missing");
+    if(progress.includes("Random Missing")) throw new Error("Random Missing still present");
+    window.renderMilestones();
+    const milestones=document.querySelector("#view")?.innerText||"";
+    if(!milestones.includes("Milestones")||!milestones.includes("First Catch")) throw new Error("Milestones page missing");
+    window.renderTraining();
+    const training=document.querySelector("#view")?.innerText||"";
+    if(!training.includes("TRAINING RANK")||!training.includes("Training")) throw new Error("Training overview missing");
+    window.LivingDexNavigate?.("milestones");
+    const navActive=[...document.querySelectorAll(".top-nav-btn.active")].map(x=>x.textContent.trim()).join("|");
+    if(navActive!=="Milestones") throw new Error("Milestones navigation failed: "+navActive);
+    window.openInfo?.("ivysaur");
+    const info=document.querySelector("#infoContent")?.innerText||"";
+    if(!(info.includes("Bulbasaur")&&info.includes("Ivysaur")&&info.includes("Venusaur"))) throw new Error("Full evolution line missing");
+    document.body.setAttribute("data-v14-test","PASS");
+  }catch(e){ console.error(e); document.body.setAttribute("data-v14-test","FAIL:"+e.message); }
+},700);
+</script>
 </body>
 </html>

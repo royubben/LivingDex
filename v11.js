@@ -1,11 +1,11 @@
 /* Cobblemon LivingDex V1.1 - LivingDex Plus */
 (() => {
-  const V11_VERSION = '1.1.0';
+  const V11_VERSION = '1.4.1';
   const adv = { generation:'all', type:'all', status:'all', special:'all' };
   let trainingSession = null;
   let trainingStats = JSON.parse(localStorage.getItem('cobblemon-livingdex-training') || '{}');
 
-  const saveTraining = () => localStorage.setItem('cobblemon-livingdex-training', JSON.stringify(trainingStats));
+  const saveTraining = () => { localStorage.setItem('cobblemon-livingdex-training', JSON.stringify(trainingStats)); try { window.LivingDexOnline?.queueSave?.(); } catch {} };
   const tName = k => ({
     generation:'Generation', type:'Type', status:'Status', special:'Collection',
     all:'All', caught:'Caught', missing:'Missing', favorite:'Favorites'
@@ -20,71 +20,6 @@
   const caughtCount = () => mainEntries().filter(e => state[e.id]).length;
   const pct = (a,b) => b ? Math.round(a / b * 100) : 0;
   const escHtml = s => typeof esc === 'function' ? esc(s) : String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-
-  // Advanced filters extend the existing search without changing the 6x5 PC layout.
-  window.filtered = function() {
-    let a = pageEntries(tab);
-    if (query) {
-      const r = boxSearchEntries(a);
-      a = r.items;
-      a = a.filter(e => {
-        if (adv.generation !== 'all' && String(genFor(e)) !== adv.generation) return false;
-        if (adv.type !== 'all' && !entryTypes(e).includes(adv.type)) return false;
-        if (adv.status === 'caught' && !state[e.id]) return false;
-        if (adv.status === 'missing' && state[e.id]) return false;
-        if (adv.status === 'favorite' && !favorites[e.id]) return false;
-        if (adv.special !== 'all' && adv.special !== 'main' && !pageEntries(adv.special).some(x=>x.id===e.id)) return false;
-        if (adv.special === 'main' && !e.box) return false;
-        return true;
-      });
-      return {items:a, matches:r.matches};
-    }
-    a = a.filter(e => {
-      const c=!!state[e.id];
-      if (status !== 'all' && ((status==='collected'&&!c) || (status==='missing'&&c) || (status==='favorites'&&!favorites[e.id]))) return false;
-      if (!selectedTypeMatches(e)) return false;
-      if (adv.generation !== 'all' && String(genFor(e)) !== adv.generation) return false;
-      if (adv.type !== 'all' && !entryTypes(e).includes(adv.type)) return false;
-      if (adv.status === 'caught' && !c) return false;
-      if (adv.status === 'missing' && c) return false;
-      if (adv.status === 'favorite' && !favorites[e.id]) return false;
-      if (adv.special !== 'all' && adv.special !== 'main' && !pageEntries(adv.special).some(x=>x.id===e.id)) return false;
-      if (adv.special === 'main' && !e.box) return false;
-      return true;
-    });
-    return {items:a,matches:new Set()};
-  };
-
-  function addAdvancedFilterUI(){
-    if (!document.querySelector('#advancedFilterBtn')) {
-      const typesBtn = document.querySelector('#typesBtn');
-      const b = document.createElement('button'); b.id='advancedFilterBtn'; b.className='types-btn'; b.textContent='Filters';
-      typesBtn?.parentNode?.insertBefore(b, typesBtn);
-      b.onclick=()=>openFilterModal();
-    }
-    if (!document.querySelector('#advancedFilterModal')) {
-      const wrap=document.createElement('div'); wrap.innerHTML=`
-        <div id="advancedFilterOverlay" class="picker-overlay" hidden></div>
-        <div id="advancedFilterModal" class="filter-modal" hidden>
-          <button class="info-close" id="advancedFilterClose">×</button>
-          <div class="eyebrow">SMART FILTERS</div><h2>Filter your LivingDex</h2>
-          <div class="filter-form">
-            <label>Generation<select id="filterGeneration"><option value="all">All generations</option>${[1,2,3,4,5,6,7,8,9].map(n=>`<option value="${n}">Generation ${generationName(n)}</option>`).join('')}</select></label>
-            <label>Type<select id="filterType"><option value="all">All types</option>${TYPES.map(x=>`<option value="${x}">${escHtml(typeLabel(x))}</option>`).join('')}</select></label>
-            <label>Status<select id="filterStatus"><option value="all">All</option><option value="caught">Caught</option><option value="missing">Missing</option><option value="favorite">Favorites</option></select></label><label>Collection<select id="filterSpecial"><option value="all">All collections</option><option value="main">Main LivingDex</option>${[['vivillon','Vivillon'],['unown','Unown'],['furfrou','Furfrou'],['floette','Floette'],['minior','Minior'],['cobblemon-unique','Cobblemon Unique'],['arbok-patterns','Arbok Patterns'],['minecraft-forms','Minecraft Forms'],['magikarp-jump','Magikarp & Gyarados Jump']].map(x=>`<option value="${x[0]}">${x[1]}</option>`).join('')}</select></label>
-          </div>
-          <div class="filter-actions"><button id="clearAdvancedFilters" class="secondary">Clear</button><button id="applyAdvancedFilters" class="primary">Apply Filters</button></div>
-        </div>`;
-      document.body.appendChild(wrap);
-      $('#advancedFilterClose').onclick=closeFilterModal; $('#advancedFilterOverlay').onclick=closeFilterModal;
-      $('#clearAdvancedFilters').onclick=()=>{Object.assign(adv,{generation:'all',type:'all',status:'all',special:'all'});syncFilterForm();closeFilterModal();page=1;render();};
-      $('#applyAdvancedFilters').onclick=()=>{adv.generation=$('#filterGeneration').value;adv.type=$('#filterType').value;adv.status=$('#filterStatus').value;adv.special=$('#filterSpecial').value;closeFilterModal();page=1;render();};
-    }
-    syncFilterForm();
-  }
-  function syncFilterForm(){ if($('#filterGeneration')) $('#filterGeneration').value=adv.generation; if($('#filterType')) $('#filterType').value=adv.type; if($('#filterStatus')) $('#filterStatus').value=adv.status; if($('#filterSpecial')) $('#filterSpecial').value=adv.special; }
-  function openFilterModal(){addAdvancedFilterUI();syncFilterForm();$('#advancedFilterOverlay').hidden=false;$('#advancedFilterModal').hidden=false;document.body.classList.add('modal-open');}
-  function closeFilterModal(){if($('#advancedFilterOverlay'))$('#advancedFilterOverlay').hidden=true;if($('#advancedFilterModal'))$('#advancedFilterModal').hidden=true;document.body.classList.remove('modal-open');}
 
   // Rich Pokémon detail view — V1.1 BETA 4.
   window.openInfo = function(id){
@@ -135,7 +70,7 @@
       <div class="info-panel" data-panel-content="breeding"><div class="info-grid"><div class="info-item"><b>Egg groups</b><span>${escHtml((sp.eggGroups||[]).map(prettyLabel).join(', ')||'—')}</span></div><div class="info-item"><b>Experience group</b><span>${escHtml(prettyLabel(sp.experienceGroup||'')||'—')}</span></div><div class="info-item"><b>Base friendship</b><span>${sp.baseFriendship??'—'}</span></div></div></div>
       <div class="info-panel" data-panel-content="notes"><textarea id="pokemonNote" class="note-box">${escHtml(notes[e.id]||'')}</textarea><button id="saveNote" class="primary note-save">Save note</button></div>`;
       bindInfoTabs();
-      $('#detailCaught')?.addEventListener('click',()=>{if(state[e.id])delete state[e.id];else state[e.id]=true;saveAll();openInfo(e.id);render();});
+      $('#detailCaught')?.addEventListener('click',()=>{if(state[e.id])delete state[e.id];else state[e.id]=true;saveAll();touchDailyCompletion();openInfo(e.id);render();});
       $('#detailFav')?.addEventListener('click',()=>{favorites[e.id]=!favorites[e.id];if(!favorites[e.id])delete favorites[e.id];saveAll();openInfo(e.id);});
       $('#detailTeam')?.addEventListener('click',()=>{
         if(team.includes(e.id)){
@@ -158,24 +93,142 @@
     $('#infoOverlay').hidden=false;$('#infoDropdown').hidden=false;document.body.classList.add('modal-open');$('#infoDropdown').scrollTop=0;
   };
 
-  // Progress + milestones dashboard.
+  // V1.4.1 Progress, Daily Dex and Milestones.
+  const dailyDateKey = (d=new Date()) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  const addDays = (key, delta) => { const d=new Date(`${key}T12:00:00`); d.setDate(d.getDate()+delta); return dailyDateKey(d); };
+  const dailyStats = () => {
+    trainingStats.__daily ||= { streak:0, bestStreak:0, lastCompleted:'', totalCompleted:0 };
+    return trainingStats.__daily;
+  };
+  const DAILY_EXCLUDED_LABELS = new Set(['legendary','mythical','ultra_beast','paradox','restricted']);
+  function isDailyEligible(e){
+    if(!e?.box) return false;
+    const sp=speciesForEntry(e);
+    const labels=(sp?.labels||[]).map(x=>String(x).toLowerCase());
+    return !labels.some(x=>DAILY_EXCLUDED_LABELS.has(x));
+  }
+  function dailyDexEntry(){
+    const list=mainEntries().filter(isDailyEligible); if(!list.length)return null;
+    const key=dailyDateKey(); let h=0; for(let i=0;i<key.length;i++)h=(h*31+key.charCodeAt(i))>>>0;
+    return list[h%list.length];
+  }
+  function normalizeDailyStreak(){
+    const ds=dailyStats(), key=dailyDateKey();
+    if(ds.lastCompleted && ds.lastCompleted!==key && ds.lastCompleted!==addDays(key,-1)){
+      ds.streak=0;
+      ds.lastCompleted='';
+      ds._streakBeforeToday=0;
+    }
+    return ds;
+  }
+  function syncDailyCompletion(entry=dailyDexEntry()){
+    const ds=normalizeDailyStreak(), key=dailyDateKey();
+    const completed=!!(entry && state[entry.id]);
+    if(completed && ds.lastCompleted!==key){
+      ds._streakBeforeToday=Number(ds.streak||0);
+      ds._lastCompletedBeforeToday=ds.lastCompleted||'';
+      ds.streak=ds.lastCompleted===addDays(key,-1)?Math.max(1,Number(ds.streak||0)+1):1;
+      ds.bestStreak=Math.max(Number(ds.bestStreak||0),Number(ds.streak||0));
+      ds.lastCompleted=key;
+      ds.totalCompleted=Number(ds.totalCompleted||0)+1;
+      saveTraining();
+      return true;
+    }
+    if(!completed && ds.lastCompleted===key){
+      ds.lastCompleted=ds._lastCompletedBeforeToday||'';
+      ds.streak=Number(ds._streakBeforeToday||0);
+      ds.totalCompleted=Math.max(0,Number(ds.totalCompleted||0)-1);
+      delete ds._lastCompletedBeforeToday;
+      delete ds._streakBeforeToday;
+      saveTraining();
+      return true;
+    }
+    return false;
+  }
+  const touchDailyCompletion=syncDailyCompletion;
+  function trainingSummaryFrom(sourceTraining=trainingStats){
+    const modes=['who','type','evolution','pokedex','generation'];
+    const totalQuestions=modes.reduce((n,k)=>n+Number(sourceTraining[k]?.questions||0),0);
+    const totalCorrect=modes.reduce((n,k)=>n+Number(sourceTraining[k]?.correct||0),0);
+    const bestScore=modes.reduce((m,k)=>Math.max(m,Number(sourceTraining[k]?.best||0)),0);
+    const perfectModes=modes.filter(k=>Number(sourceTraining[k]?.best||0)>=10).length;
+    const accuracy=totalQuestions?Math.round(totalCorrect/totalQuestions*100):0;
+    const rank=totalCorrect>=300?'Master':totalCorrect>=150?'Ace':totalCorrect>=75?'Trainer':totalCorrect>=25?'Learner':'Rookie';
+    return {totalQuestions,totalCorrect,bestScore,perfectModes,accuracy,rank};
+  }
+  function trainingSummary(){ return trainingSummaryFrom(trainingStats); }
+  function collectionStatsFrom(sourceState=state,sourceFavorites=favorites,sourceTraining=trainingStats){
+    const all=entries.filter(e=>e.id), main=mainEntries().filter(e=>e.box);
+    const caught=all.filter(e=>sourceState[e.id]).length, mainCaught=main.filter(e=>sourceState[e.id]).length;
+    const favoriteCount=Object.values(sourceFavorites).filter(Boolean).length;
+    const byBox={}; main.forEach(e=>{byBox[e.box]??={total:0,caught:0};byBox[e.box].total++;if(sourceState[e.id])byBox[e.box].caught++;});
+    const fullBoxes=Object.values(byBox).filter(x=>x.total>0&&x.total===x.caught).length;
+    const generations=Array.from({length:9},(_,i)=>i+1).map(g=>{const list=main.filter(e=>genFor(e)===g),got=list.filter(e=>sourceState[e.id]).length;return {g,total:list.length,got,p:pct(got,list.length)};}).filter(x=>x.total);
+    const types=TYPES.map(t=>{const list=main.filter(e=>entryTypes(e).includes(t)),got=list.filter(e=>sourceState[e.id]).length;return {t,total:list.length,got,p:pct(got,list.length)};}).filter(x=>x.total);
+    const d=sourceTraining.__daily||{};
+    return {total:all.length,caught,missing:Math.max(0,all.length-caught),mainTotal:main.length,mainCaught,main, favoriteCount,fullBoxes,daily:{streak:Number(d.streak||0),bestStreak:Number(d.bestStreak||0),lastCompleted:d.lastCompleted||'',totalCompleted:Number(d.totalCompleted||0)},training:trainingSummaryFrom(sourceTraining),generations,types};
+  }
+  function collectionStats(){ return collectionStatsFrom(state,favorites,trainingStats); }
+  function milestoneDefinitions(stats){
+    const s=stats||collectionStats(), gens=s.generations||[], types=s.types||[];
+    return [
+      {id:'first-catch',icon:'⚡',name:'First Catch',desc:'Catch your first Pokémon.',unlocked:s.caught>=1},
+      {id:'ten-caught',icon:'◈',name:'10 Caught',desc:'Catch 10 Pokémon.',unlocked:s.caught>=10},
+      {id:'hundred-caught',icon:'◇',name:'100 Caught',desc:'Catch 100 Pokémon.',unlocked:s.caught>=100},
+      {id:'two-fifty-caught',icon:'◈',name:'250 Caught',desc:'Catch 250 Pokémon.',unlocked:s.caught>=250},
+      {id:'five-hundred-caught',icon:'✦',name:'500 Caught',desc:'Catch 500 Pokémon.',unlocked:s.caught>=500},
+      {id:'thousand-caught',icon:'★',name:'1,000 Caught',desc:'Catch 1,000 Pokémon.',unlocked:s.caught>=1000},
+      {id:'halfway',icon:'½',name:'Halfway There',desc:'Reach 50% of the complete collection.',unlocked:s.total>0&&s.caught/s.total>=.5},
+      {id:'generation-master',icon:'Ⅰ',name:'Generation Master',desc:'Complete at least one generation.',unlocked:gens.some(x=>x.total>0&&x.got===x.total)},
+      {id:'type-master',icon:'T',name:'Type Master',desc:'Complete at least one type.',unlocked:types.some(x=>x.total>0&&x.got===x.total)},
+      {id:'full-box',icon:'▦',name:'Full Box',desc:'Complete an entire PC box.',unlocked:s.fullBoxes>=1},
+      {id:'favorite-collector',icon:'★',name:'Favorite Collector',desc:'Mark 25 Pokémon as favorites.',unlocked:s.favoriteCount>=25},
+      {id:'daily-3',icon:'🔥',name:'Daily Starter',desc:'Reach a 3-day Daily Dex streak.',unlocked:Number(s.daily?.bestStreak||0)>=3},
+      {id:'daily-7',icon:'🔥',name:'Daily Dedication',desc:'Reach a 7-day Daily Dex streak.',unlocked:Number(s.daily?.bestStreak||0)>=7},
+      {id:'daily-30',icon:'🔥',name:'Daily Legend',desc:'Reach a 30-day Daily Dex streak.',unlocked:Number(s.daily?.bestStreak||0)>=30},
+      {id:'training-50',icon:'T',name:'Training Student',desc:'Answer 50 Training questions.',unlocked:Number(s.training?.totalQuestions||0)>=50},
+      {id:'training-perfect',icon:'10',name:'Perfect Score',desc:'Score 10/10 in a Training mode.',unlocked:Number(s.training?.bestScore||0)>=10},
+      {id:'training-master',icon:'M',name:'Training Master',desc:'Earn five perfect Training mode scores.',unlocked:Number(s.training?.perfectModes||0)>=5},
+      {id:'livingdex-complete',icon:'◆',name:'LivingDex Complete',desc:'Catch the entire main LivingDex.',unlocked:s.mainTotal>0&&s.mainCaught===s.mainTotal}
+    ];
+  }
+  window.getMilestoneDefinitions=milestoneDefinitions;
+  window.getCollectionStatsV14=collectionStats;
+  window.getCollectionStatsFromV14=collectionStatsFrom;
+  window.getDailyStatsV14=()=>({...dailyStats()});
+  window.getTrainingSummaryV14=trainingSummary;
+  window.touchDailyCompletion=syncDailyCompletion;
+
   function renderProgressPlus(){
-    const main=mainEntries(), done=caughtCount(), total=main.length;
-    const gens=Array.from({length:9},(_,i)=>i+1).map(g=>{const list=main.filter(e=>genFor(e)===g);const got=list.filter(e=>state[e.id]).length;return {g,total:list.length,got,p:pct(got,list.length)};}).filter(x=>x.total);
+    syncDailyCompletion();
+    const s=collectionStats(),main=s.main;
+    const generations=Array.from({length:9},(_,i)=>i+1).map(g=>{const list=main.filter(e=>genFor(e)===g),got=list.filter(e=>state[e.id]).length;return {g,total:list.length,got,p:pct(got,list.length)};}).filter(x=>x.total);
+    const types=TYPES.map(t=>{const list=main.filter(e=>entryTypes(e).includes(t)),got=list.filter(e=>state[e.id]).length;return {t,total:list.length,got,p:pct(got,list.length)};}).filter(x=>x.total);
     const specialKeys=['vivillon','unown','furfrou','floette','minior','cobblemon-unique','arbok-patterns','minecraft-forms','magikarp-jump'];
     const specialNames={vivillon:'Vivillon',unown:'Unown',furfrou:'Furfrou',floette:'Floette',minior:'Minior','cobblemon-unique':'Cobblemon Unique','arbok-patterns':'Arbok Patterns','minecraft-forms':'Minecraft Forms','magikarp-jump':'Magikarp & Gyarados Jump'};
-    const special=specialKeys.map(k=>{const l=pageEntries(k),g=l.filter(e=>state[e.id]).length;return [specialNames[k],g,l.length,pct(g,l.length)]});
-    const milestones=[
-      ['first','First Catch','Catch your first Pokémon.',done>=1],['ten','10 Club','Catch 10 Pokémon.',done>=10],['hundred','100 Club','Catch 100 Pokémon.',done>=100],['fivehundred','500 Club','Catch 500 Pokémon.',done>=500],['thousand','1,000 Club','Catch 1,000 Pokémon.',done>=1000],['half','Halfway There','Reach 50% completion.',pct(done,total)>=50],['threequarters','Three Quarters','Reach 75% completion.',pct(done,total)>=75],['complete','LivingDex Complete','Complete the main LivingDex.',done===total],['favorites','Favorite Collector','Mark 10 favorites.',Object.keys(favorites).length>=10],['fire','Fire Trainer','Catch 25 Fire Pokémon.',main.filter(e=>entryTypes(e).includes('Fire')&&state[e.id]).length>=25]
-    ];
-    const stats=JSON.parse(localStorage.getItem('cobblemon-livingdex-training')||'{}');
-    $('#view').innerHTML=`<div class="page-card progress-plus"><div class="achievement-hero"><div><div class="eyebrow">LIVINGDEX PROGRESS</div><h2>Progress</h2><p>${escHtml(greetingName())}'s collection overview.</p></div><div class="achievement-total"><strong>${done}</strong><span>/ ${total} caught</span><i style="width:${pct(done,total)}%"></i></div></div>
-      <div class="profile-stat-grid"><div><b>${pct(done,total)}%</b><span>Complete</span></div><div><b>Lv. ${Math.max(1,Math.floor(done/50)+1)}</b><span>Trainer level</span></div><div><b>${Object.keys(favorites).length}</b><span>Favorites</span></div><div><b>${gens.filter(x=>x.got===x.total).length}</b><span>Generations complete</span></div><div><b>${Object.values(stats).reduce((n,x)=>n+(x.questions||0),0)}</b><span>Training questions</span></div></div>
-      <section class="achievement-section"><div class="section-heading"><div><span class="eyebrow">GENERATIONS</span><h3>Regional Pokédex progress</h3></div></div><div class="progress-grid generation-progress">${gens.map(x=>`<div class="progress-card"><div class="progress-card-top"><span>Generation ${generationName(x.g)}</span><strong>${x.got} / ${x.total}</strong></div><div class="progress-track"><i style="width:${x.p}%"></i></div><small>${x.p}% complete</small></div>`).join('')}</div></section>
-      <section class="achievement-section"><div class="section-heading"><div><span class="eyebrow">SPECIAL COLLECTIONS</span><h3>Special forms</h3></div></div><div class="progress-grid">${special.map(x=>`<div class="progress-card"><div class="progress-card-top"><span>${escHtml(x[0])}</span><strong>${x[1]} / ${x[2]}</strong></div><div class="progress-track"><i style="width:${x[3]}%"></i></div><small>${x[3]}% complete</small></div>`).join('')}</div></section>
-      <section class="achievement-section"><div class="section-heading"><div><span class="eyebrow">MILESTONES</span><h3>Trainer milestones</h3></div></div><div class="milestone-grid">${milestones.map(x=>`<article class="milestone ${x[3]?'unlocked':''}"><div class="milestone-icon">${x[3]?'✓':'○'}</div><div><b>${x[1]}</b><p>${x[2]}</p></div></article>`).join('')}</div></section></div>`;
+    const special=specialKeys.map(k=>{const list=pageEntries(k),got=list.filter(e=>state[e.id]).length;return {name:specialNames[k],got,total:list.length,p:pct(got,list.length)}}).filter(x=>x.total);
+    const s2={...s,generations,types}, d=s.daily, daily=dailyDexEntry(), dailyDone=!!(daily&&state[daily.id]);
+    const milestones=milestoneDefinitions(s2), unlocked=milestones.filter(m=>m.unlocked).length;
+    $('#view').innerHTML=`<div class="page-card progress-plus v14-progress">
+      <div class="achievement-hero"><div><div class="eyebrow">COLLECTION DASHBOARD</div><h2>Progress</h2><p>${escHtml(greetingName())}'s complete LivingDex overview.</p></div><div class="achievement-total"><strong>${s.mainCaught}</strong><span>/ ${s.mainTotal} main caught</span><i style="width:${pct(s.mainCaught,s.mainTotal)}%"></i></div></div>
+      <section class="progress-stat-grid"><div><b>${s.caught}</b><span>Total caught</span></div><div><b>${s.missing}</b><span>Total missing</span></div><div><b>${pct(s.caught,s.total)}%</b><span>Total complete</span></div><div><b>${s.favoriteCount}</b><span>Favorites</span></div><div><b>${s.fullBoxes}</b><span>Full boxes</span></div><div class="stat-accent"><b>${d.streak||0}</b><span>Daily streak</span></div></section>
+      <section class="daily-dex-card ${dailyDone?'daily-complete':''}"><div class="daily-dex-art">${daily?`<img src="${spritePath(daily)}" alt="${escHtml(daily.name)}">`:''}</div><div class="daily-dex-copy"><span class="eyebrow">DAILY DEX • ${escHtml(dailyDateKey())}</span><h3>${daily?escHtml(daily.name):'Daily Dex'}</h3><p>${dailyDone?'Completed today. Keep the streak alive tomorrow.':'Complete today’s Daily Dex by having this Pokémon in your collection.'}</p><div class="daily-meta"><span class="daily-status">${dailyDone?'✓ Completed today':'○ Not completed today'}</span><span>🔥 ${d.streak||0} day streak</span><span>Best ${d.bestStreak||0}</span></div></div><button id="dailyDexView" class="secondary" ${daily?'':'disabled'}>View Pokémon</button></section>
+      <section class="achievement-section"><div class="section-heading"><div><span class="eyebrow">GENERATIONS</span><h3>Generation completion</h3></div><span class="section-note">${generations.filter(x=>x.got===x.total).length} / ${generations.length} complete</span></div><div class="progress-grid generation-progress">${generations.map(x=>`<article class="progress-card ${x.got===x.total?'progress-complete':''}"><div class="progress-card-top"><span>Generation ${generationName(x.g)}</span><strong>${x.got} / ${x.total}</strong></div><div class="progress-track"><i style="width:${x.p}%"></i></div><small>${x.p}% complete</small></article>`).join('')}</div></section>
+      <section class="achievement-section"><div class="section-heading"><div><span class="eyebrow">TYPES</span><h3>Completion per type</h3></div><span class="section-note">${types.filter(x=>x.got===x.total).length} / ${types.length} complete</span></div><div class="progress-grid type-progress">${types.map(x=>`<article class="progress-card ${x.got===x.total?'progress-complete':''}"><div class="progress-card-top"><span class="knowledge-chip mini" style="${typeStyle(x.t)}">${escHtml(typeLabel(x.t))}</span><strong>${x.got} / ${x.total}</strong></div><div class="progress-track"><i style="width:${x.p}%"></i></div><small>${x.p}% complete</small></article>`).join('')}</div></section>
+      <section class="achievement-section"><div class="section-heading"><div><span class="eyebrow">SPECIAL COLLECTIONS</span><h3>Special forms</h3></div></div><div class="progress-grid special-progress">${special.map(x=>`<article class="progress-card ${x.got===x.total?'progress-complete':''}"><div class="progress-card-top"><span>${escHtml(x.name)}</span><strong>${x.got} / ${x.total}</strong></div><div class="progress-track"><i style="width:${x.p}%"></i></div><small>${x.p}% complete</small></article>`).join('')}</div></section>
+      <section class="progress-footer-grid"><article class="progress-summary-card"><div class="summary-icon">🏅</div><div><span class="eyebrow">MILESTONES</span><h3>${unlocked} / ${milestones.length} badges earned</h3><p>Badges for collection, Daily Dex and Training achievements.</p></div><button id="progressMilestones" class="secondary">View Milestones</button></article><article class="progress-summary-card"><div class="summary-icon">◎</div><div><span class="eyebrow">TRAINING</span><h3>${escHtml(s.training.rank)} Rank</h3><p>${s.training.totalQuestions} questions · ${s.training.accuracy}% accuracy · best ${s.training.bestScore}/10</p></div><button id="progressTraining" class="secondary">Open Training</button></article></section>
+    </div>`;
+    $('#dailyDexView')?.addEventListener('click',()=>daily&&openInfo(daily.id));
+    $('#progressMilestones')?.addEventListener('click',()=>window.LivingDexNavigate?.('milestones'));
+    $('#progressTraining')?.addEventListener('click',()=>window.LivingDexNavigate?.('training'));
   }
-
+  function renderMilestones(){
+    const main=mainEntries().filter(e=>e.box);
+    const generations=Array.from({length:9},(_,i)=>i+1).map(g=>{const list=main.filter(e=>genFor(e)===g),got=list.filter(e=>state[e.id]).length;return {g,total:list.length,got};}).filter(x=>x.total);
+    const types=TYPES.map(t=>{const list=main.filter(e=>entryTypes(e).includes(t)),got=list.filter(e=>state[e.id]).length;return {t,total:list.length,got};}).filter(x=>x.total);
+    const s=collectionStats(), ms=milestoneDefinitions({...s,generations,types}), unlocked=ms.filter(m=>m.unlocked).length;
+    $('#view').innerHTML=`<div class="page-card online-page milestones-page v14-page"><div class="achievement-hero"><div><div class="eyebrow">BADGE COLLECTION</div><h2>Milestones</h2><p>Earn badges through collection, Daily Dex and Training achievements.</p></div><div class="achievement-total"><strong>${unlocked}</strong><span>/ ${ms.length} earned</span><i style="width:${pct(unlocked,ms.length)}%"></i></div></div><div class="milestone-grid v14-milestones">${ms.map(m=>`<article class="milestone-badge ${m.unlocked?'unlocked':''}"><div class="badge-art">${escHtml(m.icon)}</div><div><b>${escHtml(m.name)}</b><p>${escHtml(m.desc)}</p></div><span class="badge-state">${m.unlocked?'EARNED':'LOCKED'}</span></article>`).join('')}</div></div>`;
+  }
   // Training hub and quizzes.
   const shuffle=a=>a.slice().sort(()=>Math.random()-.5);
   const pickEntry=pool=>pool[Math.floor(Math.random()*pool.length)];
@@ -187,7 +240,22 @@
     } else if(mode==='type'){
       const def=entryTypes(e); const eff=TYPES.filter(t=>effectiveness(def,t)>1); correct=pickEntry(eff.length?eff:TYPES); choices=shuffle([correct,...shuffle(TYPES.filter(t=>t!==correct && !eff.includes(t))).slice(0,3)]); prompt=`Which attacking type is super effective against ${e.name}?`;
     } else if(mode==='evolution'){
-      const candidates=pool.filter(x=>speciesForEntry(x)?.preEvolution); const target=pickEntry(candidates.length?candidates:pool); const sp=speciesForEntry(target); const pre=sp?.preEvolution||''; correct=pre || pickEntry(pool.filter(x=>x.id!==target.id)).name; choices=shuffle([correct,...shuffle(pool.filter(x=>x.name!==correct).map(x=>x.name)).slice(0,3)]); prompt=`Which Pokémon evolves into ${target.name}?`;
+      const basePool=mainEntries().filter(e=>e.box&&!e.form);
+      const bySpecies=new Map();
+      basePool.forEach(entry=>{const key=speciesKeyFromName(entry.raw||entry.name||'')||norm(entry.name||''); if(!bySpecies.has(key))bySpecies.set(key,entry);});
+      const pairs=[];
+      for(const [key,sp] of Object.entries(LOCAL_SPECIES)){
+        if(!sp?.preEvolution) continue;
+        const sourceKey=speciesKeyFromName(sp.preEvolution)||norm(sp.preEvolution).replace(/[^a-z0-9]+/g,'');
+        const source=bySpecies.get(sourceKey), target=bySpecies.get(key);
+        if(source&&target&&source.id!==target.id) pairs.push({source,target});
+      }
+      const pair=pickEntry(pairs);
+      if(!pair){ return trainingQuestion('who'); }
+      const target=pair.target; correct=pair.source.name;
+      const distractorPool=basePool.filter(x=>x.id!==pair.source.id).map(x=>x.name);
+      choices=shuffle([correct,...shuffle(distractorPool.filter(n=>n!==correct)).slice(0,3)]);
+      prompt='Which Pokémon evolves into the Pokémon shown?';
     } else if(mode==='pokedex'){
       correct=String(e.dex); choices=shuffle([correct,...shuffle(pool.filter(x=>x.id!==e.id).map(x=>String(x.dex))).slice(0,3)]); prompt=`What is ${e.name}'s Pokédex number?`;
     } else {
@@ -203,7 +271,7 @@
     function draw(){
       if(trainingSession.total>=10){finish();return;} trainingSession.q=trainingQuestion(mode);trainingSession.answered=false;const q=trainingSession.q;
       $('#trainingTitle').textContent={who:"Who's That Pokémon?",type:'Type Learner',evolution:'Evolution Training',pokedex:'Pokédex Training',generation:'Generation Training'}[mode];
-      const art=mode==='who'?`<div class="training-art"><img src="${spritePath(q.e)}"></div>`:`<div class="training-target"><img src="${spritePath(q.e)}"><div><b>${escHtml(q.prompt)}</b></div></div>`;
+      const art=mode==='who'?`<div class="training-art"><img src="${spritePath(q.e)}"></div>`:mode==='evolution'?`<div class="training-target evolution-target"><div class="evolution-target-art"><img src="${spritePath(q.e)}"><span>Target Pokémon</span></div><div><b>${escHtml(q.e.name)}</b><small>${escHtml(q.prompt)}</small></div></div>`:`<div class="training-target"><img src="${spritePath(q.e)}"><div><b>${escHtml(q.prompt)}</b></div></div>`;
       $('#trainingQuestion').innerHTML=`${art}<div class="quiz-prompt">${mode==='who'?'':escHtml(q.prompt)}</div><div class="quiz-choices">${q.choices.map(c=>`<button class="quiz-choice" data-answer="${escHtml(c)}">${escHtml(mode==='type'?typeLabel(c):mode==='generation'?`Generation ${generationName(Number(c))}`:c)}</button>`).join('')}</div>`;
       $('#trainingFeedback').textContent='';$('#trainingNext').hidden=true;$('#trainingNumber').textContent=trainingSession.total+1;
       $$('#trainingQuestion .quiz-choice').forEach(b=>b.onclick=()=>answer(b));
@@ -214,8 +282,9 @@
   }
   function renderTraining(){
     const labels={who:["Who's That Pokémon?",'Identify Pokémon from their sprite.'],type:['Type Learner','Learn weaknesses, resistances and super-effective matchups.'],evolution:['Evolution Training','Practice evolution relationships.'],pokedex:['Pokédex Training','Learn numbers and LivingDex order.'],generation:['Generation Training','Practice which generation each Pokémon belongs to.']};
-    const cards=Object.entries(labels).map(([k,v])=>{const s=trainingStats[k]||{};const acc=s.questions?pct(s.correct||0,s.questions):0;return `<article class="training-card"><div class="training-card-icon">${{who:'?',type:'T',evolution:'↗',pokedex:'#',generation:'G'}[k]}</div><div><div class="eyebrow">TRAINING</div><h3>${v[0]}</h3><p>${v[1]}</p><div class="training-statline"><span>Best <b>${s.best||0}/10</b></span><span>Accuracy <b>${acc}%</b></span></div></div><button class="primary training-start" data-training="${k}">Start</button></article>`;}).join('');
-    $('#view').innerHTML=`<div class="page-card training-page"><div class="page-title"><div><div class="eyebrow">TRAINER SCHOOL</div><h2>Training</h2><p>Test your Pokémon knowledge and build your streak.</p></div><div class="training-total"><b>${Object.values(trainingStats).reduce((n,s)=>n+(s.questions||0),0)}</b><span>questions answered</span></div></div><div class="training-grid">${cards}</div></div>`;
+    const sum=trainingSummary();
+    const cards=Object.entries(labels).map(([k,v])=>{const ss=trainingStats[k]||{};const acc=ss.questions?pct(ss.correct||0,ss.questions):0;return `<article class="training-card"><div class="training-card-icon">${{who:'?',type:'T',evolution:'↗',pokedex:'#',generation:'G'}[k]}</div><div><div class="eyebrow">TRAINING</div><h3>${v[0]}</h3><p>${v[1]}</p><div class="training-statline"><span>Best <b>${ss.best||0}/10</b></span><span>Accuracy <b>${acc}%</b></span><span>Questions <b>${ss.questions||0}</b></span></div></div><button class="primary training-start" data-training="${k}">Start</button></article>`;}).join('');
+    $('#view').innerHTML=`<div class="page-card training-page v14-training"><div class="page-title"><div><div class="eyebrow">TRAINER SCHOOL</div><h2>Training</h2><p>Test your Pokémon knowledge and build your skills.</p></div><div class="training-rank-card"><span class="eyebrow">TRAINING RANK</span><strong>${sum.rank}</strong><small>${sum.totalCorrect} correct answers</small></div></div><div class="training-overview-grid"><div><b>${sum.totalQuestions}</b><span>Questions answered</span></div><div><b>${sum.totalCorrect}</b><span>Correct answers</span></div><div><b>${sum.accuracy}%</b><span>Overall accuracy</span></div><div><b>${sum.bestScore}/10</b><span>Best score</span></div><div><b>${sum.perfectModes}</b><span>Perfect modes</span></div></div><div class="training-grid">${cards}</div></div>`;
     $$('.training-start').forEach(b=>b.onclick=()=>startTraining(b.dataset.training));
   }
 
@@ -258,11 +327,14 @@
 
   // Boot V1.1 after the V1.0 app has loaded its data and local state.
   function boot(){
-    document.title='Cobblemon LivingDex — V1.2';
+    document.title='Cobblemon LivingDex — V1.4';
     // Expose the V1.1/V1.2 views explicitly so the database layer and navigation
     // always call the same implementations.
     window.renderTraining = renderTraining;
     window.renderProgressPlus = renderProgressPlus;
+    window.renderProgressV13 = renderProgressPlus;
+    window.renderMilestones = renderMilestones;
+    window.__dailyDexEntry = dailyDexEntry;
     window.renderTopNav = renderTopNav;
     window.renderView = renderView;
     addBackupControls();

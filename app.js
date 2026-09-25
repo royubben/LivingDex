@@ -7,7 +7,7 @@ function pokeApiUrl(e){return `https://raw.githubusercontent.com/PokeAPI/sprites
 
 const SPRITE_FILE_OVERRIDES={"regional-bias-102-alolan":"0102_Exeggcute_#U2014_Alolan.png","regional-bias-104-alolan":"0104_Cubone_#U2014_Alolan.png","regional-bias-109-galarian":"0109_Koffing_#U2014_Galarian.png"};
 const $=s=>document.querySelector(s);const $$=s=>[...document.querySelectorAll(s)];
-const APP_VERSION='1.1.0';
+const APP_VERSION='1.4.1';
 let DATA,entries=[],tab='main',page=1,status='all',query='',selectedTypes=[],language='en',theme=localStorage.getItem('livingdex-theme')||'dark',view='dex';
 const PAGE_SIZE=30;
 const state=JSON.parse(localStorage.getItem('cobblemon-livingdex-state')||'{}');
@@ -15,8 +15,8 @@ const favorites=JSON.parse(localStorage.getItem('cobblemon-livingdex-favorites')
 const notes=JSON.parse(localStorage.getItem('cobblemon-livingdex-notes')||'{}');
 const team=JSON.parse(localStorage.getItem('cobblemon-livingdex-team')||'[]');
 const profile=JSON.parse(localStorage.getItem('cobblemon-livingdex-profile')||'null');
-const saveAll=()=>{localStorage.setItem('cobblemon-livingdex-state',JSON.stringify(state));localStorage.setItem('cobblemon-livingdex-favorites',JSON.stringify(favorites));localStorage.setItem('cobblemon-livingdex-notes',JSON.stringify(notes));localStorage.setItem('cobblemon-livingdex-team',JSON.stringify(team));};
-function saveProfile(p){localStorage.setItem('cobblemon-livingdex-profile',JSON.stringify(p));}
+const saveAll=()=>{localStorage.setItem('cobblemon-livingdex-state',JSON.stringify(state));localStorage.setItem('cobblemon-livingdex-favorites',JSON.stringify(favorites));localStorage.setItem('cobblemon-livingdex-notes',JSON.stringify(notes));localStorage.setItem('cobblemon-livingdex-team',JSON.stringify(team));localStorage.setItem('cobblemon-livingdex-local-dirty',`${Date.now()}-${Math.random().toString(36).slice(2)}`);try{window.LivingDexOnline?.queueSave?.();}catch{}};
+function saveProfile(p){localStorage.setItem('cobblemon-livingdex-profile',JSON.stringify(p));localStorage.setItem('cobblemon-livingdex-local-dirty',`${Date.now()}-${Math.random().toString(36).slice(2)}`);try{window.LivingDexOnline?.queueSave?.();}catch{}}
 function greetingName(){return JSON.parse(localStorage.getItem('cobblemon-livingdex-profile')||'null')?.trainerName||'Trainer';}
 function assistantName(){return JSON.parse(localStorage.getItem('cobblemon-livingdex-profile')||'null')?.assistantName||'Dex';}
 function norm(s){return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');}
@@ -116,30 +116,30 @@ const evoReverse={};for(const[k,sp]of Object.entries(LOCAL_SPECIES)){for(const e
 function evoRequirement(ev){const out=[];if(ev.requiredContext)out.push(`Item: ${prettyLabel(String(ev.requiredContext).split(':').pop())}`);for(const r of(ev.requirements||[])){const v=r.variant;if(v==='level')out.push(`Level ${r.minLevel??''}${r.maxLevel!=null?`–${r.maxLevel}`:''}`);else if(v==='friendship')out.push(`Friendship ≥ ${r.amount??r.minFriendship??'?'} `);else if(v==='item')out.push(`Item: ${prettyLabel(r.item||r.itemName||'')}`);else if(v==='held_item')out.push(`Held item: ${prettyLabel(r.heldItem||r.item||'')}`);else if(v==='move')out.push(`Move: ${prettyLabel(r.move||'')}`);else if(v==='time')out.push(`Time: ${prettyLabel(r.time||'')}`);else if(v==='biome'){const bm={'#cobblemon:evolution/regional/pikachu_alolabiome':'Beach / Tropical Island','#cobblemon:evolution/regional/pikachu_kantobiome':'Forest','#cobblemon:evolution/regional/cubone_alolabiome':'Beach / Tropical Island','#cobblemon:evolution/regional/exeggcute_alolabiome':'Beach / Tropical Island'};if(r.biomeCondition)out.push(`Biome: ${bm[r.biomeCondition]||prettyLabel(r.biomeCondition)}`);if(r.biomeAnticondition)out.push(`Not biome: ${bm[r.biomeAnticondition]||prettyLabel(r.biomeAnticondition)}`);}else{const vals=Object.entries(r).filter(([k])=>k!=='variant').map(([k,v])=>`${prettyLabel(k)}: ${prettyLabel(String(v))}`);if(vals.length)out.push(vals.join(', '));}}return out.join(' + ')||prettyLabel(ev.variant||'');}
 function findEntryForEvolution(result,source){const rawText=norm(result);let formHint='';if(/\balolan\b/.test(rawText))formHint='alola';else if(/\bhisuian\b/.test(rawText))formHint='hisui';else if(/\bgalarian\b/.test(rawText))formHint='galar';else if(/\bpaldean\b/.test(rawText))formHint='paldea';const baseText=rawText.replace(/\b(alolan|hisuian|galarian|paldean)\b/g,'').trim();const baseNorm=baseText.replace(/[^a-z0-9]+/g,'');let candidates=entries.filter(e=>{const er=norm(e.raw||e.name).replace(/[^a-z0-9]+/g,'');const en=norm(e.name).replace(/[^a-z0-9]+/g,'');return er===baseNorm||en===baseNorm||er===baseNorm+formHint||en===formHint+baseNorm;});if(formHint)candidates=candidates.filter(e=>norm(`${e.form} ${e.name}`).includes(formHint)||norm(e.raw).includes(formHint));else candidates=candidates.filter(e=>!e.form);return candidates[0]||entries.find(e=>Number(e.dex)===Number(source?.dex)&&!e.form)||null;}
 function evoBranchesFor(e){
+  const sp=speciesForEntry(e);
+  if(!sp)return [];
+  const targetKey=speciesKeyFromName(e.raw||e.name||'');
+  if(!targetKey)return [];
+  const roots=[];const seenAnc=new Set();
+  function rootsFor(key){if(seenAnc.has(key))return;seenAnc.add(key);const parents=[...(evoReverse[key]||[])].filter(Boolean);if(!parents.length){roots.push(key);return;}parents.forEach(rootsFor);}
+  rootsFor(targetKey);
+  const entryForKey=key=>entries.find(x=>!x.form&&speciesKeyFromName(x.raw||x.name||'')===key)||entries.find(x=>speciesKeyFromName(x.raw||x.name||'')===key)||null;
   const branches=[];
-  const root=speciesForEntry(e);
-  if(!root)return branches;
-  const seenGlobal=new Set();
   function walk(node,path,seen){
-    const key=String(node.entry?.id||speciesKeyFromName(node.species?.name||''));
-    if(seen.has(key)){branches.push(path);return;}
+    const key=speciesKeyFromName(node.entry?.raw||node.entry?.name||node.species?.name||'')||String(node.entry?.id||'');
+    if(seen.has(key))return;
     const nextSeen=new Set(seen);nextSeen.add(key);
-    const here=[...path,node];
-    const list=(node.species?.evolutions||[]);
-    let advanced=false;
-    for(const ev of list){
-      const en=findEntryForEvolution(ev.result,node.entry);
-      if(!en||en.id===node.entry?.id)continue;
-      const ns=speciesForEntry(en);
-      if(!ns)continue;
-      const nextKey=String(en.id);
-      if(nextSeen.has(nextKey)){continue;}
-      advanced=true;
-      walk({entry:en,species:ns,from:ev},here,nextSeen);
+    const here=[...path,node];const next=[];
+    for(const ev of node.species?.evolutions||[]){
+      const en=findEntryForEvolution(ev.result,node.entry);if(!en||en.id===node.entry?.id)continue;
+      const ns=speciesForEntry(en);if(!ns)continue;
+      const nk=speciesKeyFromName(en.raw||en.name||'')||String(en.id);if(nextSeen.has(nk))continue;
+      next.push({entry:en,species:ns,from:ev});
     }
-    if(!advanced)branches.push(here);
+    if(!next.length){if(here.some(n=>n.entry?.id===e.id))branches.push(here);return;}
+    next.forEach(n=>walk(n,here,nextSeen));
   }
-  walk({entry:e,species:root},[],seenGlobal);
+  (roots.length?roots:[targetKey]).forEach(k=>{const re=entryForKey(k);if(re){const rs=speciesForEntry(re);if(rs)walk({entry:re,species:rs},[],new Set());}});
   return branches;
 }
 function evoHtml(e){const branches=evoBranchesFor(e);if(!branches.length)return `<div class="empty-panel">${esc(T('noEvolution'))}</div>`;return branches.map(br=>`<div class="evo-chain">${br.map((n,i)=>`${i?`<span class="evo-arrow">→<small>${esc(evoRequirement(n.from))}</small></span>`:''}<div class="evo-node"><img src="${spritePath(n.entry)}" alt="${esc(n.species.name)}"><b>${esc(n.species.name)}</b>${n.entry.form?`<small>${esc(n.entry.form)}</small>`:''}</div>`).join('')}</div>`).join('');}
@@ -238,5 +238,5 @@ function closeWelcomeBack(){const modal=$('#welcomeBackModal'),overlay=$('#welco
 
 function closeProfileSetup(){const trainer=($('#trainerName').value||'Trainer').trim()||'Trainer';const assistant=($('#assistantName').value||'Dex').trim()||'Dex';const previous=JSON.parse(localStorage.getItem('cobblemon-livingdex-profile')||'{}');saveProfile({trainerName:trainer,assistantName:assistant,favoritePokemon:$('#favoritePokemon')?.value||'',favoriteType:$('#favoriteType')?.value||'',favoriteRegion:$('#favoriteRegion')?.value||'',favoriteGeneration:$('#favoriteGeneration')?.value||'',showInPlayers:previous.showInPlayers,showOnLeaderboard:previous.showOnLeaderboard,showTeam:previous.showTeam});Object.assign(window,{profileReady:true});if($('#brandSubtitle'))$('#brandSubtitle').textContent=`Welcome back, ${trainer}`;$('#profileOverlay').hidden=true;$('#profileModal').hidden=true;document.body.classList.remove('modal-open');window.LivingDexOnline?.sync?.();renderView();} 
 
-window.openProfileOptions=openProfileOptions;window.state=state;window.favorites=favorites;window.notes=notes;window.team=team;window.saveAll=saveAll;window.saveProfile=saveProfile;window.entryById=entryById;window.spritePath=spritePath;window.render=render;
+window.openProfileOptions=openProfileOptions;window.state=state;window.favorites=favorites;window.notes=notes;window.team=team;window.saveAll=saveAll;window.saveProfile=saveProfile;window.entryById=entryById;window.spritePath=spritePath;window.render=render;window.__getLivingDexEntries=()=>entries;
 $('#tabSelect').onchange=e=>{closeInfo();tab=e.target.value;page=1;query='';selectedTypes=[];status='all';$('#search').value='';$$('.filter').forEach(x=>x.classList.remove('active'));renderTabs();render();};$('#search').oninput=e=>{closeInfo();query=e.target.value;page=1;render();};$$('.filter').forEach(b=>b.onclick=()=>{status=status===b.dataset.status?'all':b.dataset.status;page=1;$$('.filter').forEach(x=>x.classList.toggle('active',x.dataset.status===status));render();});$('#prev').onclick=()=>{page--;render();};$('#next').onclick=()=>{page++;render();};$('#resetBtn').onclick=()=>{if(confirm('Clear all collected Pokémon?')){Object.keys(state).forEach(k=>delete state[k]);saveAll();render();}};$('#typesBtn').onclick=()=>{$('#typeOverlay').hidden=false;$('#typeModal').hidden=false;renderTypeModal();};$('#typeOverlay').onclick=()=>{$('#typeModal').hidden=true;$('#typeOverlay').hidden=true;};$('#typeModalClose').onclick=()=>{$('#typeModal').hidden=true;$('#typeOverlay').hidden=true;};$('#settingsBtn').onclick=e=>{e.stopPropagation();$('#settingsMenu').classList.toggle('open');};document.addEventListener('click',e=>{if(!e.target.closest('.settings-wrap'))$('#settingsMenu').classList.remove('open');});$('#settingsTheme').onchange=e=>{theme=e.target.value;localStorage.setItem('livingdex-theme',theme);applySettings();};$('#profileContinue').onclick=closeProfileSetup;$('#profileBtn').onclick=e=>{e.stopPropagation();openProfileOptions();};$('#profileOverlay').onclick=e=>e.stopPropagation();$('#welcomeBackContinue').onclick=closeWelcomeBack;$('#welcomeOverlay').onclick=closeWelcomeBack;$('#infoClose').onclick=closeInfo;$('#infoOverlay').onclick=closeInfo;document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeInfo();$('#typeModal').hidden=true;$('#typeOverlay').hidden=true;document.querySelector('.picker-overlay')?.remove();}});init();
