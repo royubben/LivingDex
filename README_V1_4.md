@@ -1,3 +1,5 @@
+V1.4.2 — Evolution Training Fix
+
 # Cobblemon LivingDex V1.4
 
 ## New

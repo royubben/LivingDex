@@ -1,6 +1,6 @@
 /* Cobblemon LivingDex V1.1 - LivingDex Plus */
 (() => {
-  const V11_VERSION = '1.4.2';
+  const V11_VERSION = '1.4.1';
   const adv = { generation:'all', type:'all', status:'all', special:'all' };
   let trainingSession = null;
   let trainingStats = JSON.parse(localStorage.getItem('cobblemon-livingdex-training') || '{}');
@@ -234,40 +234,25 @@
   const pickEntry=pool=>pool[Math.floor(Math.random()*pool.length)];
   function trainingQuestion(mode){
     const pool=mainEntries().filter(e=>entryTypes(e).length);
-    let e=pickEntry(pool); let choices=[], prompt='', correct='';
+    const e=pickEntry(pool); let choices=[], prompt='', correct='';
     if(mode==='who'){
       correct=e.name; choices=shuffle([correct,...shuffle(pool.filter(x=>x.id!==e.id).map(x=>x.name)).slice(0,3)]); prompt='Who is this Pokémon?';
     } else if(mode==='type'){
       const def=entryTypes(e); const eff=TYPES.filter(t=>effectiveness(def,t)>1); correct=pickEntry(eff.length?eff:TYPES); choices=shuffle([correct,...shuffle(TYPES.filter(t=>t!==correct && !eff.includes(t))).slice(0,3)]); prompt=`Which attacking type is super effective against ${e.name}?`;
     } else if(mode==='evolution'){
-      // Build questions from the actual Cobblemon species preEvolution relation.
-      // Both the target and the correct answer are always the exact LivingDex entries
-      // whose displayed names are used by the buttons, so punctuation/normalisation
-      // differences in the local species dataset can never make the answer invisible.
       const basePool=mainEntries().filter(e=>e.box&&!e.form);
       const bySpecies=new Map();
-      basePool.forEach(entry=>{
-        const key=speciesKeyFromName(entry.raw||entry.name||'')||norm(entry.name||'');
-        if(!bySpecies.has(key))bySpecies.set(key,entry);
-      });
+      basePool.forEach(entry=>{const key=speciesKeyFromName(entry.raw||entry.name||'')||norm(entry.name||''); if(!bySpecies.has(key))bySpecies.set(key,entry);});
       const pairs=[];
-      for(const [targetKey,targetSpecies] of Object.entries(LOCAL_SPECIES)){
-        if(!targetSpecies?.preEvolution) continue;
-        const sourceKey=speciesKeyFromName(targetSpecies.preEvolution)||norm(targetSpecies.preEvolution).replace(/[^a-z0-9]+/g,'');
-        const sourceEntry=bySpecies.get(sourceKey);
-        const targetEntry=bySpecies.get(targetKey);
-        if(!sourceEntry||!targetEntry||sourceEntry.id===targetEntry.id) continue;
-        // Validate the relation against the source species' actual evolution result.
-        const sourceSpecies=LOCAL_SPECIES[sourceKey];
-        const pointsToTarget=(sourceSpecies?.evolutions||[]).some(ev=>speciesKeyFromName(ev.result||'')===targetKey);
-        if(!pointsToTarget) continue;
-        pairs.push({source:sourceEntry,target:targetEntry});
+      for(const [key,sp] of Object.entries(LOCAL_SPECIES)){
+        if(!sp?.preEvolution) continue;
+        const sourceKey=speciesKeyFromName(sp.preEvolution)||norm(sp.preEvolution).replace(/[^a-z0-9]+/g,'');
+        const source=bySpecies.get(sourceKey), target=bySpecies.get(key);
+        if(source&&target&&source.id!==target.id) pairs.push({source,target});
       }
       const pair=pickEntry(pairs);
       if(!pair){ return trainingQuestion('who'); }
-      const target=pair.target;
-      e=target;
-      correct=pair.source.name;
+      const target=pair.target; correct=pair.source.name;
       const distractorPool=basePool.filter(x=>x.id!==pair.source.id).map(x=>x.name);
       choices=shuffle([correct,...shuffle(distractorPool.filter(n=>n!==correct)).slice(0,3)]);
       prompt='Which Pokémon evolves into the Pokémon shown?';
