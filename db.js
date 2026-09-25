@@ -229,7 +229,7 @@
     // LivingDex was clicked once. Use the shared navigation state declared
     // above so the profile button can switch the same state to `account`.
     window.renderTopNav=()=>{
-      const items=[['dex','LivingDex'],['team','Team Builder'],['types','Type Information'],['training','Training'],['achievements','Progress'],['milestones','Milestones'],['players','Players'],['leaderboard','Leaderboard']];
+      const items=[['dex','LivingDex'],['daily','Daily Dex'],['team','Team Builder'],['types','Type Information'],['training','Training'],['achievements','Progress'],['milestones','Milestones'],['players','Players'],['leaderboard','Leaderboard']];
       $('#topNav').innerHTML=items.map(([k,n])=>`<button class="top-nav-btn ${currentView===k?'active':''}" data-view="${k}">${n}</button>`).join('');
       $$('.top-nav-btn').forEach(b=>b.onclick=async()=>{
         window.closeInfo?.();
@@ -245,6 +245,7 @@
       if(currentView==='team')window.renderTeam();
       else if(currentView==='types')window.renderTypeKnowledge();
       else if(currentView==='training')window.renderTraining();
+      else if(currentView==='daily')window.renderDailyDex?.();
       else if(currentView==='achievements')((window.renderProgressV13||window.renderProgressPlus)?.());
       else if(currentView==='milestones')window.renderMilestones?.();
       else if(currentView==='players')playersPage();
@@ -256,7 +257,7 @@
   }
 
   async function boot(){
-    document.title='Cobblemon LivingDex — V1.4';
+    document.title='Cobblemon LivingDex — V1.5';
     // Install the local UI before any network request so Progress and the rest
     // of the application are immediately available even if auth is slow.
     installNav();

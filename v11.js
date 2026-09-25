@@ -1,6 +1,6 @@
 /* Cobblemon LivingDex V1.1 - LivingDex Plus */
 (() => {
-  const V11_VERSION = '1.4.2';
+  const V11_VERSION = '1.5.0';
   const adv = { generation:'all', type:'all', status:'all', special:'all' };
   let trainingSession = null;
   let trainingStats = JSON.parse(localStorage.getItem('cobblemon-livingdex-training') || '{}');
@@ -97,8 +97,19 @@
   const dailyDateKey = (d=new Date()) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   const addDays = (key, delta) => { const d=new Date(`${key}T12:00:00`); d.setDate(d.getDate()+delta); return dailyDateKey(d); };
   const dailyStats = () => {
-    trainingStats.__daily ||= { streak:0, bestStreak:0, lastCompleted:'', totalCompleted:0 };
-    return trainingStats.__daily;
+    trainingStats.__daily ||= { streak:0, bestStreak:0, lastCompleted:'', totalCompleted:0, firstDate:'', history:{} };
+    const ds=trainingStats.__daily;
+    ds.history ||= {};
+    if(!ds.firstDate){
+      if(ds.lastCompleted){
+        const span=Math.max(1,Number(ds.streak||1));
+        ds.firstDate=addDays(ds.lastCompleted,-(span-1));
+        for(let i=0;i<span;i++) ds.history[addDays(ds.lastCompleted,-i)]=true;
+      } else {
+        ds.firstDate=dailyDateKey();
+      }
+    }
+    return ds;
   };
   const DAILY_EXCLUDED_LABELS = new Set(['legendary','mythical','ultra_beast','paradox','restricted']);
   function isDailyEligible(e){
@@ -114,6 +125,7 @@
   }
   function normalizeDailyStreak(){
     const ds=dailyStats(), key=dailyDateKey();
+    ds.history[key]=!!(dailyDexEntry() && state[dailyDexEntry().id]);
     if(ds.lastCompleted && ds.lastCompleted!==key && ds.lastCompleted!==addDays(key,-1)){
       ds.streak=0;
       ds.lastCompleted='';
@@ -121,9 +133,25 @@
     }
     return ds;
   }
+  function backfillDailyHistory(){
+    const ds=dailyStats(), today=dailyDateKey(), first=ds.firstDate||today;
+    let d=first;
+    const guard=0;
+    let safety=0;
+    while(d<today && safety<3700){
+      if(!(d in ds.history)) ds.history[d]=false;
+      d=addDays(d,1); safety++;
+    }
+    // The current day always reflects the live collection state.
+    const current=dailyDexEntry();
+    ds.history[today]=!!(current && state[current.id]);
+    return ds;
+  }
   function syncDailyCompletion(entry=dailyDexEntry()){
     const ds=normalizeDailyStreak(), key=dailyDateKey();
+    backfillDailyHistory();
     const completed=!!(entry && state[entry.id]);
+    ds.history[key]=completed;
     if(completed && ds.lastCompleted!==key){
       ds._streakBeforeToday=Number(ds.streak||0);
       ds._lastCompletedBeforeToday=ds.lastCompleted||'';
@@ -199,6 +227,77 @@
   window.getTrainingSummaryV14=trainingSummary;
   window.touchDailyCompletion=syncDailyCompletion;
 
+  let dailyCalendarYear = new Date().getFullYear();
+  let dailyCalendarMonth = new Date().getMonth();
+  const monthName = (year,month) => new Intl.DateTimeFormat('en-GB',{month:'long',year:'numeric'}).format(new Date(year,month,1));
+  const compareDateKey = (a,b) => a===b?0:(a<b?-1:1);
+  const monthDays = (year,month) => new Date(year,month+1,0).getDate();
+  const firstDateOfMonth = (year,month) => `${year}-${String(month+1).padStart(2,'0')}-01`;
+  const dailyEntryForDate = key => {
+    const list=mainEntries().filter(isDailyEligible); if(!list.length)return null;
+    let h=0; for(let i=0;i<key.length;i++)h=(h*31+key.charCodeAt(i))>>>0;
+    return list[h%list.length];
+  };
+  function dailyHistoryStatus(key, entry){
+    const today=dailyDateKey(), ds=dailyStats();
+    if(compareDateKey(key,today)>0) return 'future';
+    if(key===today) return entry&&state[entry.id]?'complete':'today';
+    if(ds.history && Object.prototype.hasOwnProperty.call(ds.history,key)) return ds.history[key]?'complete':'missed';
+    if(ds.firstDate && compareDateKey(key,ds.firstDate)>=0) return 'missed';
+    return 'untracked';
+  }
+  function renderDailyDex(){
+    syncDailyCompletion();
+    backfillDailyHistory();
+    const ds=dailyStats(), today=dailyDateKey();
+    const minMonth=ds.firstDate ? new Date(`${ds.firstDate}T12:00:00`) : new Date();
+    const currentMonth=new Date(new Date().getFullYear(),new Date().getMonth(),1);
+    const viewingDate=new Date(dailyCalendarYear,dailyCalendarMonth,1);
+    if(viewingDate>currentMonth){ dailyCalendarYear=currentMonth.getFullYear(); dailyCalendarMonth=currentMonth.getMonth(); }
+    const y=dailyCalendarYear,m=dailyCalendarMonth,totalDays=monthDays(y,m);
+    let leading=(new Date(y,m,1).getDay()+6)%7;
+    const cells=[];
+    for(let i=0;i<leading;i++) cells.push('<div class="daily-calendar-empty" aria-hidden="true"></div>');
+    let monthComplete=0,monthMissed=0,monthPending=0;
+    for(let day=1;day<=totalDays;day++){
+      const key=`${y}-${String(m+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+      const entry=dailyEntryForDate(key), status=dailyHistoryStatus(key,entry);
+      if(status==='complete')monthComplete++; else if(status==='missed')monthMissed++; else if(status==='today')monthPending++;
+      const future=status==='future', untracked=status==='untracked';
+      const sprite=entry && !future && !untracked ? `<img src="${spritePath(entry)}" alt="${escHtml(entry.name)}">` : '';
+      const name=entry && !future && !untracked ? escHtml(entry.name) : future ? 'Not yet' : 'Not tracked';
+      const dayButton = (entry && !future && !untracked)
+        ? `<button class="daily-calendar-day ${status}${key===today?' is-today':''}" data-daily-date="${key}" aria-label="${escHtml(entry.name)} on ${key}"><span class="daily-day-number">${day}</span><span class="daily-day-state">${status==='complete'?'✓':status==='missed'?'×':status==='today'?'TODAY':''}</span><div class="daily-day-art">${sprite}</div><b>${name}</b></button>`
+        : `<div class="daily-calendar-day ${status}${key===today?' is-today':''}"><span class="daily-day-number">${day}</span><span class="daily-day-state">${future?'':''}</span><div class="daily-day-art">${future?'<span class="daily-question">?</span>':''}</div><b>${name}</b></div>`;
+      cells.push(dayButton);
+    }
+    const canGoPrev = viewingDate>new Date(minMonth.getFullYear(),minMonth.getMonth(),1);
+    const canGoNext = viewingDate<currentMonth;
+    const shownCompleted=(y===currentMonth.getFullYear()&&m===currentMonth.getMonth())?monthComplete:monthComplete;
+    const completionForMonth=totalDays ? Math.round(monthComplete/Math.max(1,monthComplete+monthMissed+monthPending)*100) : 0;
+    const firstTracked=ds.firstDate;
+    $('#view').innerHTML=`<div class="page-card daily-calendar-page">
+      <div class="daily-calendar-hero">
+        <div><div class="eyebrow">DAILY DEX</div><h2>Daily Dex</h2><p>One Pokémon every day. Keep the chain alive and build your streak.</p></div>
+        <div class="daily-streak-hero"><span>🔥 Current streak</span><strong>${Number(ds.streak||0)}</strong><small>Best ${Number(ds.bestStreak||0)} days</small></div>
+      </div>
+      <section class="daily-calendar-panel">
+        <div class="daily-month-bar"><button class="secondary daily-month-btn" id="dailyPrevMonth" ${canGoPrev?'':'disabled'}>←</button><div><span class="eyebrow">MONTHLY JOURNAL</span><h3>${monthName(y,m)}</h3><p>${monthComplete} completed · ${monthMissed} missed${monthPending?' · today pending':''}</p></div><button class="secondary daily-month-btn" id="dailyNextMonth" ${canGoNext?'':'disabled'}>→</button></div>
+        <div class="daily-month-summary"><span><i class="daily-key-dot complete"></i>Completed</span><span><i class="daily-key-dot missed"></i>Missed</span><span><i class="daily-key-dot today"></i>Today</span><span><i class="daily-key-dot future"></i>Future</span></div>
+        <div class="daily-weekdays">${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(x=>`<span>${x}</span>`).join('')}</div>
+        <div class="daily-calendar-grid">${cells.join('')}</div>
+      </section>
+      <section class="daily-insight-grid">
+        <article><span class="eyebrow">TOTAL COMPLETED</span><strong>${Number(ds.totalCompleted||0)}</strong><small>Daily Dex days completed</small></article>
+        <article><span class="eyebrow">THIS MONTH</span><strong>${completionForMonth}%</strong><small>${monthComplete} completed days</small></article>
+        <article><span class="eyebrow">BEST STREAK</span><strong>${Number(ds.bestStreak||0)}</strong><small>Longest consecutive streak</small></article>
+        <article><span class="eyebrow">TRACKING SINCE</span><strong>${firstTracked?new Intl.DateTimeFormat('en-GB',{day:'numeric',month:'short',year:'numeric'}).format(new Date(`${firstTracked}T12:00:00`)):'Today'}</strong><small>Your Daily Dex journey</small></article>
+      </section>
+    </div>`;
+    $('#dailyPrevMonth')?.addEventListener('click',()=>{dailyCalendarMonth--;if(dailyCalendarMonth<0){dailyCalendarMonth=11;dailyCalendarYear--;}renderDailyDex();});
+    $('#dailyNextMonth')?.addEventListener('click',()=>{dailyCalendarMonth++;if(dailyCalendarMonth>11){dailyCalendarMonth=0;dailyCalendarYear++;}renderDailyDex();});
+    $$('[data-daily-date]').forEach(b=>b.addEventListener('click',()=>{const e=dailyEntryForDate(b.dataset.dailyDate);if(e)openInfo(e.id);}));
+  }
   function renderProgressPlus(){
     syncDailyCompletion();
     const s=collectionStats(),main=s.main;
@@ -251,6 +350,7 @@
         if(!bySpecies.has(key))bySpecies.set(key,entry);
       });
       const pairs=[];
+      const evolutionSourceIds=new Set();
       for(const [targetKey,targetSpecies] of Object.entries(LOCAL_SPECIES)){
         if(!targetSpecies?.preEvolution) continue;
         const sourceKey=speciesKeyFromName(targetSpecies.preEvolution)||norm(targetSpecies.preEvolution).replace(/[^a-z0-9]+/g,'');
@@ -262,14 +362,17 @@
         const pointsToTarget=(sourceSpecies?.evolutions||[]).some(ev=>speciesKeyFromName(ev.result||'')===targetKey);
         if(!pointsToTarget) continue;
         pairs.push({source:sourceEntry,target:targetEntry});
+        evolutionSourceIds.add(sourceEntry.id);
       }
       const pair=pickEntry(pairs);
       if(!pair){ return trainingQuestion('who'); }
       const target=pair.target;
       e=target;
       correct=pair.source.name;
-      const distractorPool=basePool.filter(x=>x.id!==pair.source.id).map(x=>x.name);
-      choices=shuffle([correct,...shuffle(distractorPool.filter(n=>n!==correct)).slice(0,3)]);
+      // Every answer option must itself belong to a real evolution relationship.
+      // This prevents unrelated single-stage Pokémon from appearing as distractors.
+      const evolutionAnswerPool=basePool.filter(x=>evolutionSourceIds.has(x.id)&&x.id!==pair.source.id);
+      choices=shuffle([correct,...shuffle(evolutionAnswerPool.map(x=>x.name).filter(n=>n!==correct)).slice(0,3)]);
       prompt='Which Pokémon evolves into the Pokémon shown?';
     } else if(mode==='pokedex'){
       correct=String(e.dex); choices=shuffle([correct,...shuffle(pool.filter(x=>x.id!==e.id).map(x=>String(x.dex))).slice(0,3)]); prompt=`What is ${e.name}'s Pokédex number?`;
@@ -315,7 +418,7 @@
   };
 
   window.renderTopNav = function(){
-    const items=[['dex','LivingDex'],['team','Team Builder'],['types','Type Information'],['training','Training'],['achievements','Progress']];
+    const items=[['dex','LivingDex'],['daily','Daily Dex'],['team','Team Builder'],['types','Type Information'],['training','Training'],['achievements','Progress']];
     $('#topNav').innerHTML=items.map(([k,n])=>`<button class="top-nav-btn ${view===k?'active':''}" data-view="${k}">${n}</button>`).join('');
     $$('.top-nav-btn').forEach(b=>b.onclick=()=>{closeInfo();view=b.dataset.view;renderTopNav();renderView();});
   };
@@ -325,6 +428,7 @@
     if(view==='team')renderTeam();
     else if(view==='types')renderTypeKnowledge();
     else if(view==='training')renderTraining();
+    else if(view==='daily')renderDailyDex();
     else if(view==='achievements')renderProgressPlus();
   };
 
@@ -342,13 +446,14 @@
 
   // Boot V1.1 after the V1.0 app has loaded its data and local state.
   function boot(){
-    document.title='Cobblemon LivingDex — V1.4';
+    document.title='Cobblemon LivingDex — V1.5';
     // Expose the V1.1/V1.2 views explicitly so the database layer and navigation
     // always call the same implementations.
     window.renderTraining = renderTraining;
     window.renderProgressPlus = renderProgressPlus;
     window.renderProgressV13 = renderProgressPlus;
     window.renderMilestones = renderMilestones;
+    window.renderDailyDex = renderDailyDex;
     window.__dailyDexEntry = dailyDexEntry;
     window.renderTopNav = renderTopNav;
     window.renderView = renderView;
@@ -366,7 +471,7 @@
       const b=e.target.closest?.('.top-nav-btn');
       if(!b)return;
       const target=b.dataset.view;
-      if(!['dex','team','types','training','achievements'].includes(target))return;
+      if(!['dex','team','types','training','daily','achievements'].includes(target))return;
       e.preventDefault();
       closeInfo();
       view=target;
