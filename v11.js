@@ -639,6 +639,7 @@
   // ================================================================
   const V2_NAV = [
     ['home','⌂','Home'],
+    ['activity','≡','Feed'],
     ['dex','▦','LivingDex'],
     ['daily','◷','Catch Calendar'],
     ['training','⚔','Training'],
@@ -647,7 +648,6 @@
     ['achievements','★','Progress'],
     ['stats','◌','Statistics'],
     ['goals','◎','Goals'],
-    ['activity','≡','Activity'],
     ['profile','◉','Trainer'],
     ['players','◎','Players'],
     ['leaderboard','♛','Leaderboard']
@@ -660,26 +660,88 @@
   function v2MainCount(){return pageEntries('main').length||entries.length;}
   function v2Pct(a,b){return b?Math.round(a/b*100):0;}
   function v2IconNav(active){
-    const primary=V2_NAV.filter(x=>['home','dex','daily','training','team','types'].includes(x[0]));
-    const journey=V2_NAV.filter(x=>['achievements','stats','goals','activity'].includes(x[0]));
+    const primary=V2_NAV.filter(x=>['home','activity','dex','daily','training','team','types'].includes(x[0]));
+    const journey=V2_NAV.filter(x=>['achievements','stats','goals'].includes(x[0]));
     const social=V2_NAV.filter(x=>['profile','players','leaderboard'].includes(x[0]));
     const button=([id,icon,label])=>`<button class="v2-nav-item ${active===id?'active':''}" data-v2-view="${id}"><span class="v2-nav-icon">${icon}</span><span>${label}</span></button>`;
     const section=(label,items)=>`<div class="v2-nav-section"><span class="v2-nav-section-label">${label}</span>${items.map(button).join('')}</div>`;
     const side=document.querySelector('#v2SidebarNav');
     if(side) side.innerHTML=section('TRAINER HUB',primary)+section('JOURNEY',journey)+section('SOCIAL',social);
-    const mobileItems=[V2_NAV.find(x=>x[0]==='home'),V2_NAV.find(x=>x[0]==='dex'),V2_NAV.find(x=>x[0]==='daily'),V2_NAV.find(x=>x[0]==='training'),V2_NAV.find(x=>x[0]==='profile')];
+    const mobileItems=[V2_NAV.find(x=>x[0]==='home'),V2_NAV.find(x=>x[0]==='activity'),V2_NAV.find(x=>x[0]==='dex'),V2_NAV.find(x=>x[0]==='training'),V2_NAV.find(x=>x[0]==='profile')];
     const mobile=document.querySelector('#v2MobileNav');
     if(mobile) mobile.innerHTML=mobileItems.map(([id,icon,label])=>`<button class="v2-mobile-item ${active===id?'active':''}" data-v2-view="${id}"><span>${icon}</span><small>${id==='profile'?'Trainer':label}</small></button>`).join('');
     document.querySelectorAll('[data-v2-view]').forEach(b=>b.onclick=()=>v2Navigate(b.dataset.v2View));
   }
+  let v2FeedLiveTimer=null;
+  function v2StopFeedLive(){if(v2FeedLiveTimer){clearInterval(v2FeedLiveTimer);v2FeedLiveTimer=null;}}
+  function v2StartFeedLive(){v2StopFeedLive();v2FeedLiveTimer=setInterval(()=>{if(view!=='activity'){v2StopFeedLive();return;}if(document.visibilityState==='hidden')return;const list=document.querySelector('.v2-feed-list');const keep=list?.scrollTop||0;v2RenderFeed({silent:true}).then(()=>{const next=document.querySelector('.v2-feed-list');if(next)next.scrollTop=keep;});},30000);}
   function v2Navigate(target){
+    if(target!=='activity')v2StopFeedLive();
     closeInfo();
-    if(target==='profile'){ if(window.openProfileView)window.openProfileView(); else if(typeof openProfileOptions==='function')openProfileOptions(); return; }
+    if(target==='profile'){ renderV2TrainerCard(); return; }
     if(['players','leaderboard'].includes(target)){
       view=target; v2IconNav(target); renderTopNav(); renderView(); return;
     }
     view=target; v2IconNav(target); renderTopNav(); renderView();
   }
+  function renderV2TrainerCard(){
+    const p=v2Profile();
+    const meta=profileMeta();
+    const caught=v2CaughtCount(), total=v2MainCount(), pct=v2Pct(caught,total);
+    const xp=v2XpSnapshot(), daily=v2DailySnapshot();
+    const stats=collectionStats();
+    const badges=milestoneDefinitions({...stats,generations:v2GenerationStats(),types:stats.types||[]});
+    const unlocked=badges.filter(b=>b.unlocked), featuredIds=(meta.featuredBadges||[]).slice(0,5);
+    const featured=featuredIds.map(id=>badges.find(b=>b.id===id)).filter(Boolean);
+    const favId=p.favoritePokemon||'';
+    const fav=entries.find(e=>e.name===favId || e.id===favId);
+    const teamIds=Array.isArray(team)?team.slice(0,6):[];
+    const teamCards=teamIds.map(id=>{
+      const e=entries.find(x=>x.id===id||x.name===id);
+      return e?`<div class="v2-trainer-team-mon"><img loading="lazy" decoding="async" src="${escHtml(spritePath(e))}" alt="${escHtml(e.name)}"><span>${escHtml(e.name)}</span></div>`:'';
+    }).join('') || '<div class="v2-trainer-empty">No team selected yet.</div>';
+    const genRows=v2GenerationStats().map(g=>`<div class="v2-trainer-progress-row"><span>Generation ${g.g}</span><div><i style="width:${g.pct}%"></i></div><b>${g.pct}%</b></div>`).join('');
+    const typeRows=(stats.types||[]).slice().sort((a,b)=>b.p-a.p).slice(0,6).map(t=>`<div class="v2-trainer-type-row"><span>${escHtml(typeLabel(t.t))}</span><div><i style="width:${t.p}%"></i></div><b>${t.p}%</b></div>`).join('');
+    const banner=meta.banner||p.banner||'aurora';
+    const ign=meta.ign||p.ign||'';
+    const bio=meta.bio||p.bio||'';
+    const favoriteArt=fav?`<img class="v2-trainer-favorite-art" loading="lazy" decoding="async" src="${escHtml(spritePath(fav))}" alt="${escHtml(fav.name)}">`:'';
+    $('#dexView').hidden=true; $('#view').hidden=false;
+    $('#view').innerHTML=`
+      <div class="v2-trainer-page">
+        <section class="v2-trainer-hero banner-${escHtml(banner)}">
+          <div class="v2-trainer-hero-glow"></div>
+          <div class="v2-trainer-identity">
+            <div class="v2-trainer-avatar">◈</div>
+            <div><span class="eyebrow">TRAINER CARD 2.0</span><h2>${escHtml(p.name||p.trainerName||'Trainer')}</h2><p>${ign?`IGN · ${escHtml(ign)} · `:''}Trainer OS</p>${bio?`<div class="v2-trainer-bio">${escHtml(bio)}</div>`:''}</div>
+          </div>
+          <div class="v2-trainer-hero-actions"><div class="v2-level-pill"><strong>LV ${xp.level}</strong><span>${xp.intoLevel}/100 XP</span></div><button id="v2TrainerEdit" class="primary">Edit Profile</button></div>
+          ${favoriteArt}
+        </section>
+        <section class="v2-trainer-stat-grid">
+          <article><span>LivingDex</span><strong>${pct}%</strong><small>${caught.toLocaleString()} / ${total.toLocaleString()} caught</small></article>
+          <article><span>Trainer XP</span><strong>${xp.xp.toLocaleString()}</strong><small>${100-xp.intoLevel} XP to next level</small></article>
+          <article><span>Daily Streak</span><strong>🔥 ${daily.streak}</strong><small>Best ${daily.bestStreak}</small></article>
+          <article><span>Rewards</span><strong>${unlocked.length}</strong><small>${badges.length} total milestones</small></article>
+        </section>
+        <div class="v2-trainer-columns">
+          <div class="v2-trainer-main">
+            <section class="v2-trainer-panel v2-trainer-progress-panel"><div class="v2-trainer-panel-head"><div><span class="eyebrow">COLLECTION PROGRESS</span><h3>How far you've come</h3></div><strong>${pct}%</strong></div><div class="v2-trainer-wide-progress"><i style="width:${pct}%"></i></div><div class="v2-trainer-progress-grid">${genRows}</div></section>
+            <section class="v2-trainer-panel"><div class="v2-trainer-panel-head"><div><span class="eyebrow">FEATURED</span><h3>Your badges</h3></div><button id="v2TrainerBadges" class="secondary">Edit badges</button></div><div class="v2-trainer-badges">${featured.map(b=>`<div class="v2-trainer-badge"><img loading="lazy" decoding="async" src="${escHtml(b.asset)}" alt="${escHtml(b.name)}"><b>${escHtml(b.name)}</b></div>`).join('')||'<div class="v2-trainer-empty">No featured badges yet. Earn milestones and choose your favourites.</div>'}</div></section>
+            <section class="v2-trainer-panel"><div class="v2-trainer-panel-head"><div><span class="eyebrow">TYPE COLLECTION</span><h3>Your strongest types</h3></div></div><div class="v2-trainer-type-list">${typeRows}</div></section>
+          </div>
+          <aside class="v2-trainer-side">
+            <section class="v2-trainer-panel v2-trainer-favorite-panel"><span class="eyebrow">FAVOURITE POKÉMON</span><h3>${fav?escHtml(fav.name):'Choose a favourite'}</h3>${favoriteArt?`<div class="v2-trainer-favorite-wrap">${favoriteArt}</div>`:'<p>Set your favourite Pokémon in Edit Profile.</p>'}</section>
+            <section class="v2-trainer-panel"><div class="v2-trainer-panel-head"><div><span class="eyebrow">YOUR TEAM</span><h3>Current squad</h3></div><button id="v2TrainerTeam" class="secondary">Team Builder</button></div><div class="v2-trainer-team">${teamCards}</div></section>
+            <section class="v2-trainer-panel v2-trainer-quick-stats"><span class="eyebrow">TRAINER RECORD</span><div><b>${stats.favoriteCount||0}</b><small>Favorites</small></div><div><b>${stats.fullBoxes||0}</b><small>Full boxes</small></div><div><b>${stats.training?.totalQuestions||0}</b><small>Training questions</small></div><div><b>${stats.training?.accuracy||0}%</b><small>Training accuracy</small></div></section>
+          </aside>
+        </div>
+      </div>`;
+    $('#v2TrainerEdit')?.addEventListener('click',()=>openProfileOptions?.());
+    $('#v2TrainerBadges')?.addEventListener('click',()=>window.openFeaturedBadgeEditor?.());
+    $('#v2TrainerTeam')?.addEventListener('click',()=>v2Navigate('team'));
+  }
+
   function v2DailySnapshot(){
     try{ window.touchDailyCompletion?.(); }catch{}
     const d=trainingStats?.__daily||{};
@@ -756,19 +818,61 @@
     ];
     $('#view').innerHTML=`<div class="page-card v2-rich-page"><div class="page-title"><div><div class="eyebrow">TRAINER OBJECTIVES</div><h2>Goals</h2><p>Small goals keep your collection moving without turning the app into a grind.</p></div></div><div class="v2-goal-list">${goals.map(g=>{const p=v2Pct(g[1],g[2]);return `<article class="v2-goal"><div class="v2-goal-top"><div><b>${escHtml(g[0])}</b><small>${escHtml(String(g[3]))}</small></div><strong>${Math.min(g[1],g[2])}/${g[2]}</strong></div><div class="v2-wide-progress"><i style="width:${p}%"></i></div></article>`}).join('')}</div></div>`;
   }
-  function renderV2Activity(){
-    const rows=v2ActivityRows(50);
-    const html=rows.length?rows.map(a=>{
-      const txt=v2ActivityText(a);
-      const when=a.ts?new Date(Number(a.ts)).toLocaleString([], {day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):(a.date||'');
-      return `<article class="v2-activity-row"><div class="v2-activity-icon">${a.type==='caught'?'✓':a.type==='evolved'?'↗':a.type==='traded'?'⇄':a.type==='training_complete'?'⚔':a.type?.startsWith('daily')?'★':'•'}</div><div><b>${escHtml(txt)}</b><small>${escHtml(when)}</small></div></article>`;
-    }).join(''):`<div class="v2-empty-feed">No activity yet. Your Trainer journey will appear here.</div>`;
-    $('#view').innerHTML=`<div class="page-card v2-rich-page"><div class="page-title"><div><div class="eyebrow">TRAINER JOURNAL</div><h2>Activity</h2><p>Your personal collection history in one place.</p></div></div><div class="v2-activity-list">${html}</div></div>`;
+  function v2FeedIcon(a){return a?.type==='caught'?'✦':a?.type==='evolved'?'↗':a?.type==='traded'?'⇄':a?.type==='training_complete'?'⚔':a?.type?.startsWith('daily')?'★':'•';}
+  function v2FeedWhen(a){return a?.ts?new Date(Number(a.ts)).toLocaleString([], {day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):(a?.date||'');}
+  function v2FeedEntry(a){
+    const id=a?.entryId||'';
+    let e=entries.find(x=>String(x.id)===String(id));
+    if(!e && a?.name)e=entries.find(x=>String(x.name).toLowerCase()===String(a.name).toLowerCase());
+    if(!e && a?.entryName)e=entries.find(x=>String(x.name).toLowerCase()===String(a.entryName).toLowerCase());
+    return e||null;
   }
+  function v2FeedMedia(a){
+    const e=v2FeedEntry(a);
+    if(!e)return '';
+    return `<div class="v2-feed-pokemon-media"><div class="v2-feed-pokemon-glow"></div><img loading="lazy" decoding="async" src="${escHtml(spritePath(e))}" alt="${escHtml(e.name)}"><span>#${escHtml(String(e.num||e.id||''))}</span></div>`;
+  }
+  function v2FeedMeta(a){
+    const e=v2FeedEntry(a);
+    const type=e?.types?.[0]||'';
+    return `${e?`<span class="v2-feed-pokemon-name">${escHtml(e.name)}</span>`:''}${type?`<span class="v2-feed-type-chip" style="${typeStyle(type)}">${escHtml(typeLabel(type))}</span>`:''}`;
+  }
+  function v2ReactionMarkup(a, reactionData){
+    const counts=reactionData?.counts||{}; const mine=reactionData?.mine||'';
+    const reactions=[['❤️','love'],['🔥','fire'],['👏','clap'],['😂','laugh'],['💯','hundred']];
+    return `<div class="v2-feed-reactions" data-reactions-for="${escHtml(a.id||'')}">${reactions.map(([emoji,key])=>`<button type="button" class="v2-reaction-btn ${mine===key?'active':''}" data-reaction="${key}" data-activity-id="${escHtml(a.id||'')}"><span>${emoji}</span><b>${Number(counts[key]||0)||''}</b></button>`).join('')}</div>`;
+  }
+  function v2CommentMarkup(a, comments=[]){
+    const safe=Array.isArray(comments)?comments:[];
+    return `<div class="v2-feed-comments" data-comments-for="${escHtml(a.id||'')}"><div class="v2-comments-list">${safe.map(c=>`<div class="v2-comment"><div class="v2-comment-avatar">${escHtml(String(c.display_name||'T').slice(0,1).toUpperCase())}</div><div><b>${escHtml(c.display_name||'Trainer')}</b><span>${escHtml(c.body||'')}</span></div><small>${escHtml(c.created_at?new Date(c.created_at).toLocaleString([], {day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):'')}</small></div>`).join('')||'<div class="v2-comments-empty">Be the first to say something.</div>'}</div><form class="v2-comment-form" data-comment-form="${escHtml(a.id||'')}"><input maxlength="280" placeholder="Write a comment…" aria-label="Write a comment"><button type="submit">Post</button></form></div>`;
+  }
+  async function v2LoadFeedComments(activityIds){if(typeof window.getFeedCommentsV17!=='function')return [];try{return await window.getFeedCommentsV17(activityIds||[]);}catch(err){console.warn('Feed comments unavailable',err);return [];}}
+  async function v2LoadFeedReactions(activityIds){if(typeof window.getFeedReactionsV17!=='function')return new Map();try{return await window.getFeedReactionsV17(activityIds||[]);}catch(err){console.warn('Feed reactions unavailable',err);return new Map();}}
+  function v2AttachFeedInteractions(root){
+    root?.querySelectorAll('[data-comment-form]').forEach(form=>form.addEventListener('submit',async e=>{e.preventDefault();const input=form.querySelector('input'),body=(input?.value||'').trim(),activityId=form.dataset.commentForm;if(!body||!activityId)return;if(!window.isOnlineTrainerV17?.()){alert('Sign in to comment on the Feed.');return;}const btn=form.querySelector('button');if(btn)btn.disabled=true;try{const ok=await window.postFeedCommentV17?.(activityId,body);if(!ok){alert('Could not post the comment.');return;}input.value='';await v2RenderFeed();}finally{if(btn)btn.disabled=false;}}));
+    root?.querySelectorAll('[data-reaction]').forEach(btn=>btn.addEventListener('click',async()=>{const activityId=btn.dataset.activityId,reaction=btn.dataset.reaction;if(!activityId)return;if(!window.isOnlineTrainerV17?.()){alert('Sign in to react on the Feed.');return;}btn.disabled=true;try{const ok=await window.toggleFeedReactionV17?.(activityId,reaction);if(!ok){const detail=window.getLastFeedReactionErrorV17?.()||'Onbekende databasefout.';alert(`Deze reactie kon niet worden opgeslagen.\n\n${detail}\n\nControleer of de Social Feed migration in Supabase is uitgevoerd.`);return;}await v2RenderFeed();}finally{btn.disabled=false;}}));
+  }
+  async function v2RenderFeed(opts={}){
+    document.body.dataset.v2FeedMode='global';
+    await v2LoadGlobalActivity();
+    const rows=v2GlobalActivityRows().slice(0,60);
+    const comments=await v2LoadFeedComments(rows.map(a=>a.id).filter(Boolean));
+    const reactions=await v2LoadFeedReactions(rows.map(a=>a.id).filter(Boolean));
+    const byId=new Map();comments.forEach(c=>{const id=c.activity_id;if(!byId.has(id))byId.set(id,[]);byId.get(id).push(c);});
+    const html=rows.length?rows.map(a=>{
+      const text=v2GlobalActivityText(a), e=v2FeedEntry(a), media=v2FeedMedia(a), reactionData=reactions.get(a.id)||{counts:{},mine:''};
+      const actionLabel=a.type==='caught'?'CAUGHT':a.type==='evolved'?'EVOLVED':a.type==='traded'?'TRADE':a.type==='training_complete'?'TRAINING':a.type?.startsWith('daily')?'DAILY':'TRAINER UPDATE';
+      return `<article class="v2-feed-post v2-social-post"><div class="v2-feed-post-top"><div class="v2-feed-author"><div class="v2-feed-avatar">${escHtml(String(a.trainerName||'Trainer').slice(0,1).toUpperCase())}</div><div><b>${escHtml(a.trainerName||'Trainer')}</b><small>${escHtml(v2FeedWhen(a))}</small></div></div><span class="v2-feed-action-pill">${actionLabel}</span></div><div class="v2-feed-copy"><strong>${escHtml(text)}</strong>${e?`<div class="v2-feed-pokemon-meta">${v2FeedMeta(a)}</div>`:''}</div>${media}<div class="v2-feed-social-bar">${v2ReactionMarkup(a,reactionData)}<span class="v2-feed-comment-count">${(byId.get(a.id)||[]).length} comments</span></div>${a.id?v2CommentMarkup(a,byId.get(a.id)||[]):''}</article>`;
+    }).join(''):`<div class="v2-empty-feed"><strong>The Feed is quiet.</strong><span>When public Trainers catch, evolve, trade or train, their stories will appear here.</span></div>`;
+    $('#view').innerHTML=`<div class="page-card v2-rich-page v2-feed-page"><div class="v2-feed-hero"><div><div class="eyebrow">TRAINER SOCIAL</div><h2>Feed</h2><p>See what Trainers are doing, celebrate their catches and join the conversation.</p></div><div class="v2-feed-hero-mark">✦<span>LIVE TRAINER ACTIVITY</span></div></div><div class="v2-feed-list">${html}</div></div>`;
+    v2AttachFeedInteractions(document.querySelector('#view'));
+    v2StartFeedLive();
+  }
+  function renderV2Activity(){v2RenderFeed();}
   function v2CommandPalette(){
     if($('#v2CommandPalette')){ $('#v2CommandPalette').hidden=false; $('#v2CommandInput')?.focus(); return; }
     const el=document.createElement('div');el.id='v2CommandPalette';el.className='v2-command-overlay';el.innerHTML=`<div class="v2-command"><button class="v2-command-close" id="v2CommandClose">×</button><div class="eyebrow">TRAINER COMMAND</div><h3>What do you want to do?</h3><input id="v2CommandInput" placeholder="Search actions…" autocomplete="off"><div id="v2CommandList"></div><small>Press Esc to close · Ctrl/⌘ K to open</small></div>`;document.body.appendChild(el);
-    const actions=[['Open Home','home','⌂'],['Open LivingDex','dex','▦'],['Open Catch Calendar','daily','◷'],['Start Training','training','⚔'],['Open Rewards','achievements','★'],['Open Statistics','stats','◌'],['Open Goals','goals','◎'],['Open Activity','activity','≡'],['Open Team Builder','team','◇'],['Open Type Knowledge','types','◈'],['Open Players','players','◎'],['Open Leaderboard','leaderboard','♛']];
+    const actions=[['Open Home','home','⌂'],['Open LivingDex','dex','▦'],['Open Catch Calendar','daily','◷'],['Start Training','training','⚔'],['Open Rewards','achievements','★'],['Open Statistics','stats','◌'],['Open Goals','goals','◎'],['Open Feed','activity','≡'],['Open Team Builder','team','◇'],['Open Type Knowledge','types','◈'],['Open Players','players','◎'],['Open Leaderboard','leaderboard','♛']];
     const draw=()=>{const q=norm($('#v2CommandInput').value);const list=actions.filter(a=>!q||norm(a[0]).includes(q));$('#v2CommandList').innerHTML=list.map(a=>`<button class="v2-command-item" data-cmd="${a[1]}"><span>${a[2]}</span>${a[0]}<kbd>↵</kbd></button>`).join('')||'<div class="v2-empty-feed">No matching action.</div>';$$('.v2-command-item').forEach(b=>b.onclick=()=>{el.hidden=true;v2Navigate(b.dataset.cmd);});};
     $('#v2CommandInput').oninput=draw;$('#v2CommandClose').onclick=()=>el.hidden=true;el.onclick=e=>{if(e.target===el)el.hidden=true};el.addEventListener('keydown',e=>{if(e.key==='Escape')el.hidden=true});draw();$('#v2CommandInput').focus();
   }
@@ -818,8 +922,9 @@
     const el=$('#v2HomeFeed'); if(!el)return;
     document.body.dataset.v2FeedMode=mode;
     const rows=mode==='global'?v2GlobalActivityRows():((typeof activityLog==='function'?activityLog():[]).filter(a=>a&&a.type).slice().sort((a,b)=>Number(b.ts||0)-Number(a.ts||0)).slice(0,12));
-    el.innerHTML=rows.length?rows.map(a=>`<div class="v2-feed-row"><span class="v2-feed-dot"></span><div><b>${escHtml(mode==='global'?v2GlobalActivityText(a):v2ActivityText(a))}</b><small>${escHtml(a.ts?new Date(Number(a.ts)).toLocaleString([], {day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):(a.date||''))}</small></div></div>`).join(''):`<div class="v2-empty-feed">${mode==='global'?'No public player activity yet.':'Your Trainer activity will appear here as you play.'}</div>`;
+    el.innerHTML=rows.length?rows.map(a=>`<div class="v2-feed-row"><span class="v2-feed-dot"></span><div class="v2-feed-row-main"><b>${escHtml(mode==='global'?v2GlobalActivityText(a):v2ActivityText(a))}</b><small>${escHtml(v2FeedWhen(a))}</small>${mode==='global'&&a.id?`<button class="v2-feed-comment-link" data-home-comment="${escHtml(a.id)}">Comment</button>`:''}</div></div>`).join(''):`<div class="v2-empty-feed">${mode==='global'?'No public player activity yet.':'Your Trainer activity will appear here as you play.'}</div>`;
     $$('#v2FeedPersonal,#v2FeedGlobal').forEach(b=>b.classList.toggle('active',(b.id==='v2FeedPersonal'&&mode==='personal')||(b.id==='v2FeedGlobal'&&mode==='global')));
+    el.querySelectorAll('[data-home-comment]').forEach(b=>b.addEventListener('click',()=>v2Navigate('activity')));
   }
   function renderV2Home(){
     $('#dexView').hidden=true; $('#view').hidden=false;
@@ -861,7 +966,7 @@
             <article class="v2-home-card"><div class="v2-card-head"><div><span class="eyebrow">COLLECTION</span><h3>Your journey</h3></div><span class="v2-big-percent">${pct}%</span></div><div class="v2-journey"><div class="v2-ring" style="--pct:${pct}%"><strong>${pct}%</strong></div><div><b>${caught.toLocaleString()} Pokémon collected</b><p>Keep building your LivingDex and unlock Trainer rewards.</p><button class="secondary" id="v2ProgressBtn">Open Progress</button></div></div></article>
           </div>
         </div>
-        <aside class="v2-home-activity"><article class="v2-home-card v2-feed-card"><div class="v2-card-head"><div><span class="eyebrow">TRAINER TIMELINE</span><h3>Recent activity</h3></div><button class="v2-text-btn" id="v2ActivityBtn">View all</button></div><div class="v2-feed-tabs" role="tablist"><button class="v2-feed-tab active" id="v2FeedPersonal" type="button">Personal</button><button class="v2-feed-tab" id="v2FeedGlobal" type="button">Global</button></div><div class="v2-feed" id="v2HomeFeed">${activity}</div></article></aside>
+        <aside class="v2-home-activity"><article class="v2-home-card v2-feed-card"><div class="v2-card-head"><div><span class="eyebrow">TRAINER TIMELINE</span><h3>Recent activity</h3></div><button class="v2-text-btn" id="v2ActivityBtn">View all</button></div><div class="v2-feed-preview" id="v2HomeFeed">${activity}</div></article></aside>
       </section>
       <section class="v2-quick-actions"><button class="v2-quick" id="v2QuickSearch">⌕<span>Command Search</span><small>Ctrl K</small></button><button class="v2-quick" id="v2QuickStats">◌<span>Statistics</span></button><button class="v2-quick" id="v2QuickGoals">◎<span>Goals</span></button><button class="v2-quick" id="v2QuickActivity">≡<span>Activity</span></button></section>
     </div>`;
@@ -869,9 +974,7 @@
     $('#v2DailyView')?.addEventListener('click',()=>d&&openInfo(d.id));
     $('#v2ProgressBtn')?.addEventListener('click',()=>v2Navigate('achievements'));
     $('#v2ActivityBtn')?.addEventListener('click',()=>v2Navigate('activity'));
-    $('#v2FeedPersonal')?.addEventListener('click',()=>v2RenderHomeFeed('personal'));
-    $('#v2FeedGlobal')?.addEventListener('click',()=>{v2RenderHomeFeed('global');v2LoadGlobalActivity();});
-    document.body.dataset.v2FeedMode='personal';
+    document.body.dataset.v2FeedMode='global';
     v2LoadGlobalActivity();
     $('#v2HeatmapDex')?.addEventListener('click',()=>v2Navigate('dex'));
     $$('[data-type-ring]').forEach(b=>b.addEventListener('click',()=>{selectedTypes=[b.dataset.typeRing];tab='main';page=1;query='';status='all';v2Navigate('dex');}));
@@ -919,7 +1022,7 @@
 
   // Boot V1.1 after the V1.0 app has loaded its data and local state.
   function boot(){
-    document.title='Cobblemon LivingDex — V2.0.12';
+    document.title='Cobblemon LivingDex — V2.0.17';
     // Expose the V1.1/V1.2 views explicitly so the database layer and navigation
     // always call the same implementations.
     window.renderTraining = renderTraining;

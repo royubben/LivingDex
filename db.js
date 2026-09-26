@@ -148,6 +148,7 @@
 
   function openProfileView(){
     try{
+      if(window.v2Navigate){ window.v2Navigate('profile'); return; }
       currentView='account';
       window.renderTopNav?.();
       window.renderView?.();
@@ -338,13 +339,43 @@
       const trainerName=names.get(item.user_id);
       if(!trainerName)continue;
       const activity=Array.isArray(item.training?.__activity)?item.training.__activity:[];
-      for(const a of activity){if(a&&a.type)rows.push({...a,trainerName});}
+      for(const a of activity){if(a&&a.type)rows.push({...a,trainerName,activityUserId:item.user_id});}
     }
     rows.sort((a,b)=>Number(b.ts||0)-Number(a.ts||0));
     globalActivityCache=rows.slice(0,100); globalActivityCacheAt=now;
     return globalActivityCache.slice();
   }
   window.getGlobalActivityV17=getGlobalActivity;
+  async function getFeedComments(activityIds=[]){if(!ONLINE||!client||!activityIds.length)return [];const {data,error}=await client.from('activity_comments').select('activity_id,user_id,body,created_at').in('activity_id',activityIds).order('created_at',{ascending:true});if(error){console.warn('Feed comments query failed',error);return [];}const rows=data||[];const ids=[...new Set(rows.map(c=>c.user_id).filter(Boolean))];let names=new Map();if(ids.length){const pr=await client.from('profiles').select('id,display_name,show_profile').in('id',ids);if(!pr.error)names=new Map((pr.data||[]).filter(p=>p.show_profile!==false).map(p=>[p.id,p.display_name||'Trainer']));}return rows.map(c=>({...c,display_name:names.get(c.user_id)||'Trainer'}));}
+  async function getFeedReactions(activityIds=[]){
+    const out=new Map();
+    if(!ONLINE||!client||!activityIds.length)return out;
+    const {data,error}=await client.from('activity_reactions').select('activity_id,user_id,reaction').in('activity_id',activityIds);
+    if(error){console.warn('Feed reactions query failed',error);return out;}
+    for(const id of activityIds)out.set(id,{counts:{},mine:''});
+    for(const row of (data||[])){const item=out.get(row.activity_id)||{counts:{},mine:''};item.counts[row.reaction]=Number(item.counts[row.reaction]||0)+1;if(currentUser&&row.user_id===currentUser.id)item.mine=row.reaction;out.set(row.activity_id,item);}
+    return out;
+  }
+  let lastFeedReactionError='';
+  async function toggleFeedReaction(activityId,reaction){
+    lastFeedReactionError='';
+    if(!ONLINE||!client||!currentUser||!activityId||!reaction)return false;
+    const allowed=['love','fire','clap','laugh','hundred'];if(!allowed.includes(reaction))return false;
+    try{
+      const {data:existing,error:readError}=await client.from('activity_reactions').select('reaction').eq('activity_id',activityId).eq('user_id',currentUser.id).maybeSingle();
+      if(readError){lastFeedReactionError=`${readError.code||'DB'}: ${readError.message||'Reaction lookup failed'}`;console.warn('Feed reaction lookup failed',readError);return false;}
+      if(existing?.reaction===reaction){
+        const {error}=await client.from('activity_reactions').delete().eq('activity_id',activityId).eq('user_id',currentUser.id);
+        if(error){lastFeedReactionError=`${error.code||'DB'}: ${error.message||'Reaction delete failed'}`;console.warn('Feed reaction delete failed',error);return false;} return true;
+      }
+      const {error:delError}=await client.from('activity_reactions').delete().eq('activity_id',activityId).eq('user_id',currentUser.id);
+      if(delError){lastFeedReactionError=`${delError.code||'DB'}: ${delError.message||'Reaction reset failed'}`;console.warn('Feed reaction reset failed',delError);return false;}
+      const {error:insertError}=await client.from('activity_reactions').insert({activity_id:activityId,user_id:currentUser.id,reaction});
+      if(insertError){lastFeedReactionError=`${insertError.code||'DB'}: ${insertError.message||'Reaction insert failed'}`;console.warn('Feed reaction insert failed',insertError);return false;} return true;
+    }catch(err){lastFeedReactionError=`${err?.code||'DB'}: ${err?.message||'Reaction failed'}`;console.warn('Feed reaction failed',err);return false;}
+  }
+  async function postFeedComment(activityId,body){if(!ONLINE||!client||!currentUser||!activityId)return false;const text=String(body||'').trim().slice(0,280);if(!text)return false;const activity=(await getGlobalActivity()).find(a=>a.id===activityId);if(!activity||!activity.activityUserId)return false;const {error}=await client.from('activity_comments').insert({activity_id:activityId,activity_user_id:activity.activityUserId,user_id:currentUser.id,body:text});if(error){console.warn('Feed comment insert failed',error);return false;}return true;}
+  window.getFeedCommentsV17=getFeedComments;window.postFeedCommentV17=postFeedComment;window.getFeedReactionsV17=getFeedReactions;window.toggleFeedReactionV17=toggleFeedReaction;window.getLastFeedReactionErrorV17=()=>lastFeedReactionError;window.isOnlineTrainerV17=()=>!!currentUser;window.getCurrentTrainerIdV17=()=>currentUser?.id||null;
 
   function installNav(){
     // V2 owns navigation when the Trainer OS layer is present. This file loads
@@ -441,6 +472,6 @@
     });
   }
   window.LivingDexOnline={get client(){return client},get user(){return currentUser},isOnline:()=>ONLINE,sync:saveOnline,queueSave,login:()=>authModal('login'),signup:()=>authModal('signup'),logout};
-  window.openProfileView=openProfileView; window.openPlayerProfile=(id)=>playerDetail(id);
+  window.openProfileView=openProfileView; window.openFeaturedBadgeEditor=openFeaturedBadgeEditor; window.openPlayerProfile=(id)=>playerDetail(id);
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot); else boot();
 })();
