@@ -2910,6 +2910,7 @@ body{overscroll-behavior-y:none}
 .journey-source{margin-top:20px;border-top:1px solid rgba(255,255,255,.08);padding-top:18px}
 .journey-source-head{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:14px}
 .journey-source-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;max-height:430px;overflow:auto;overscroll-behavior:contain}
+.journey-source-search{display:flex;align-items:center;gap:8px;margin:10px 0 9px;padding:0 12px;border:1px solid rgba(255,255,255,.09);background:rgba(255,255,255,.035);border-radius:12px;color:#7f8da3}.journey-source-search span{font-size:18px;line-height:1}.journey-source-search input{width:100%;border:0;background:transparent;color:#e8eef7;padding:10px 0;outline:none;font:inherit}.journey-source-search input::placeholder{color:#6f7c90}.journey-source-card[hidden]{display:none}.journey-search-empty{grid-column:1/-1}
 .journey-source-card{display:flex;align-items:center;gap:10px;border:1px solid rgba(255,255,255,.07);background:rgba(255,255,255,.03);border-radius:14px;padding:9px;color:inherit;text-align:left;cursor:pointer;transition:background-color .14s ease,border-color .14s ease,transform .14s ease}
 .journey-source-card:hover{background:rgba(112,153,255,.08);border-color:rgba(112,153,255,.4);transform:translateY(-1px)}
 .journey-source-card img{width:48px;height:48px;object-fit:contain}.journey-source-card b,.journey-source-card small{display:block}.journey-source-card small{color:#8f98aa;margin-top:2px}

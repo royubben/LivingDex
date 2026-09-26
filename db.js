@@ -411,14 +411,9 @@
     if(te||!tp)return {ok:false,error:te?.message||'Trainer not found or not visible.'};
     if(meErr)return {ok:false,error:meErr.message||'Could not read your Trainer profile.'};
     const fromName=me?.display_name||currentUser.user_metadata?.display_name||'Trainer', toName=tp.display_name||'Trainer';
-    const {data,error}=await client.from('trainer_trades').insert({from_user_id:currentUser.id,to_user_id:toUser,from_pokemon:fromPokemon,to_pokemon:toPokemon,from_trainer_name:fromName,to_trainer_name:toName,status:'pending'}).select('id').single();
-    if(error)return {ok:false,error:error.message||'Trade request failed.'};
-    const {error:notificationError}=await client.from('community_notifications').insert({user_id:toUser,type:'trainer_trade_request',actor_id:currentUser.id,actor_name:fromName,title:'New trade request',body:`${fromName} wants to trade ${fromPokemon} for ${toPokemon}.`,trainer_trade_id:data.id});
-    if(notificationError){
-      console.warn('Trainer trade notification insert failed',notificationError);
-      return {ok:false,error:`Trade request was created, but the notification could not be delivered: ${notificationError.message||'database policy error'}`};
-    }
-    return {ok:true,id:data.id};
+    const {data,error}=await client.rpc('create_trainer_trade',{p_to_user_id:toUser,p_from_pokemon:fromPokemon,p_to_pokemon:toPokemon,p_from_trainer_name:fromName,p_to_trainer_name:toName});
+    if(error)return {ok:false,error:error.message||'Trade request could not be created.'};
+    return {ok:true,id:data?.id||data?.trade_id};
   }
   async function getTrainerTrades(){
     if(!ONLINE||!client||!currentUser)return [];
