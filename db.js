@@ -35,7 +35,7 @@
     favorites: window.favorites || {},
     notes: window.notes || {},
     team: window.team || [],
-    training: (() => { try { return JSON.parse(localStorage.getItem('cobblemon-livingdex-training') || '{}'); } catch { return {}; } })(),
+    training: (() => { try { const t=JSON.parse(localStorage.getItem('cobblemon-livingdex-training') || '{}'); t.__journey=window.journey||JSON.parse(localStorage.getItem('cobblemon-livingdex-journey')||'{\"version\":1,\"events\":[],\"owned\":{}}'); return t; } catch { return {__journey:window.journey||{version:1,events:[],owned:{}}}; } })(),
     settings: { theme: localStorage.getItem('livingdex-theme') || 'dark' },
   });
 
@@ -97,11 +97,11 @@
         ['state','favorites','notes'].forEach(k=>{if(window[k]&&s[k]){Object.keys(window[k]).forEach(x=>delete window[k][x]);Object.assign(window[k],s[k]);}});
         if(Array.isArray(s.team)&&Array.isArray(window.team))window.team.splice(0,window.team.length,...s.team);
         window.invalidateCollectionStatsV17?.();
-        try{const rt={...(s.training||{})},rs=rt.__settings||{};delete rt.__settings;localStorage.setItem('cobblemon-livingdex-training',JSON.stringify(rt));if(rs.theme)localStorage.setItem('livingdex-theme',rs.theme);window.refreshTrainingStateV17?.();}catch{}
+        try{const rt={...(s.training||{})},rs=rt.__settings||{},rj=rt.__journey;delete rt.__settings;delete rt.__journey;if(rj&&window.journey){Object.keys(window.journey).forEach(k=>delete window.journey[k]);Object.assign(window.journey,rj);localStorage.setItem('cobblemon-livingdex-journey',JSON.stringify(window.journey));}localStorage.setItem('cobblemon-livingdex-training',JSON.stringify(rt));if(rs.theme)localStorage.setItem('livingdex-theme',rs.theme);window.refreshTrainingStateV17?.();}catch{}
       }
     }else{const ok=await saveOnline();if(!ok)return false;}
     loadedUserId=currentUser.id;
-    window.render?.();window.renderProgressPlus?.();
+    if(window.v2Navigate && window.renderV2Home){ window.renderTopNav?.(); window.renderView?.(); } else { window.render?.(); window.renderProgressPlus?.(); }
     return true;
   }
 
@@ -322,7 +322,43 @@
     draw();
   }
 
+  let globalActivityCache=null, globalActivityCacheAt=0;
+  async function getGlobalActivity(){
+    if(!ONLINE||!client)return [];
+    const now=Date.now();
+    if(globalActivityCache&&now-globalActivityCacheAt<30000)return globalActivityCache.slice();
+    const [profilesRes,statsRes]=await Promise.all([
+      client.from('profiles').select('id,display_name').eq('show_profile',true).limit(100),
+      client.from('player_public_stats').select('user_id,training').limit(100)
+    ]);
+    if(profilesRes.error||statsRes.error) throw (profilesRes.error||statsRes.error);
+    const names=new Map((profilesRes.data||[]).map(p=>[p.id,p.display_name||'Trainer']));
+    const rows=[];
+    for(const item of (statsRes.data||[])){
+      const trainerName=names.get(item.user_id);
+      if(!trainerName)continue;
+      const activity=Array.isArray(item.training?.__activity)?item.training.__activity:[];
+      for(const a of activity){if(a&&a.type)rows.push({...a,trainerName});}
+    }
+    rows.sort((a,b)=>Number(b.ts||0)-Number(a.ts||0));
+    globalActivityCache=rows.slice(0,100); globalActivityCacheAt=now;
+    return globalActivityCache.slice();
+  }
+  window.getGlobalActivityV17=getGlobalActivity;
+
   function installNav(){
+    // V2 owns navigation when the Trainer OS layer is present. This file loads
+    // after v11.js, so never let the legacy V1 router overwrite the V2 router.
+    if(window.v2Navigate && window.renderV2Home){
+      window.renderPlayers=playersPage;
+      window.renderLeaderboard=leaderboardPage;
+      window.LivingDexNavigate=(target)=>window.v2Navigate(target);
+      window.__LIVINGDEX_DB_NAV_ACTIVE=true;
+      // V2 is the owning router. The legacy app may have rendered the Dex first;
+      // after the DB layer is ready, explicitly restore the intended V2 landing page.
+      window.v2Navigate('home');
+      return;
+    }
     window.LivingDexNavigate=(target)=>{currentView=target;window.renderTopNav?.();window.renderView?.();window.scrollTo?.({top:0,behavior:'smooth'});};
     // app.js/v11.js keep `view` in a lexical variable, so window.view is not a
     // reliable source of truth. Keep the online navigation state here instead.
@@ -389,7 +425,10 @@
       playerDetail(player.dataset.playerId);
     },true);
     window.__LIVINGDEX_DB_NAV_ACTIVE=true;
-    setInterval(watchLocalOnlineData,2000);
+    const localWatchTick=()=>{ if(document.visibilityState==='visible') watchLocalOnlineData(); };
+    localWatchTick();
+    setInterval(localWatchTick,5000);
+    document.addEventListener('visibilitychange',localWatchTick,{passive:true});
     if(!ONLINE)return;
     await refreshSession();
     if(currentUser)await loadOnline();

@@ -3,14 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Cobblemon LivingDex — V1.7.6</title>
-<link rel="stylesheet" href="style.css?v=1.7.15">
+<title>Cobblemon LivingDex — V2.0.13</title>
+<link rel="stylesheet" href="style.css?v=2.0.14-responsive">
 </head>
 <body>
-<header class="topbar">
+<header class="topbar v2-topbar">
   <div class="brand">
     <div class="brand-mark">◈</div>
-    <div><h1>Cobblemon LivingDex</h1><span id="brandSubtitle">Personal collection tracker</span></div>
+    <div><h1>Cobblemon LivingDex</h1><span id="brandSubtitle">Trainer OS • Personal collection</span></div>
   </div>
   <nav id="topNav" class="top-nav"></nav>
   <div class="progress-wrap">
@@ -29,8 +29,21 @@
     </div>
   </div>
 </header>
+<aside id="v2Sidebar" class="v2-sidebar" aria-label="Trainer navigation">
+  <div class="v2-sidebar-top">
+    <div class="v2-trainer-mini">
+      <div class="v2-avatar">◈</div>
+      <div><b id="v2TrainerName">Trainer</b><span id="v2TrainerMeta">Trainer OS</span></div>
+    </div>
+  </div>
+  <nav id="v2SidebarNav" class="v2-sidebar-nav"></nav>
+  <div class="v2-sidebar-bottom">
+    <button id="v2HomeReset" class="v2-side-action">⌂ <span>Home</span></button>
+  </div>
+</aside>
+<nav id="v2MobileNav" class="v2-mobile-nav" aria-label="Mobile navigation"></nav>
 <main>
-  <div id="dexView">
+  <div id="dexView" class="v2-dex-view">
     <div class="category-nav">
       <div class="view-label">View</div>
       <select id="tabSelect" class="tab-select" aria-label="View"></select>
@@ -92,9 +105,9 @@
 </aside>
 <script src="data/cobblemon_local.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="app.js?v=1.7.15"></script>
-<script src="v11.js?v=1.7.15"></script>
-<script src="db-config.js?v=1.7.15"></script>
-<script src="db.js?v=1.7.15"></script>
+<script src="app.js?v=2.0.14-responsive"></script>
+<script src="v11.js?v=2.0.14-responsive"></script>
+<script src="db-config.js?v=2.0.14-responsive"></script>
+<script src="db.js?v=2.0.14-responsive"></script>
 </body>
 </html>

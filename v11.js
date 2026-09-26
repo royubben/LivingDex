@@ -57,109 +57,107 @@
   const escHtml = s => typeof esc === 'function' ? esc(s) : String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
   // Rich Pokémon detail view — V1.1 BETA 4.
+  const detailRarityFor = e => {
+    const sp=speciesForEntry(e)||{};
+    const labels=(sp.labels||[]).map(x=>String(x).toLowerCase());
+    if(labels.some(x=>x==='legendary')) return ['Legendary','legendary'];
+    if(labels.some(x=>x==='mythical')) return ['Mythical','mythical'];
+    if(labels.some(x=>x==='ultra_beast'||x==='ultra-beast')) return ['Ultra Beast','ultra'];
+    if(labels.some(x=>x==='paradox')) return ['Paradox','paradox'];
+    if(labels.some(x=>x==='restricted')) return ['Restricted','restricted'];
+    const buckets=detailSpawnFor(e).map(x=>String(x.bucket||'').toLowerCase());
+    if(buckets.includes('ultra-rare')) return ['Ultra Rare','ultra-rare'];
+    if(buckets.includes('rare')) return ['Rare','rare'];
+    if(buckets.includes('uncommon')) return ['Uncommon','uncommon'];
+    if(buckets.includes('common')) return ['Common','common'];
+    return ['Unknown','unknown'];
+  };
+  const detailMoveGroupsFor = e => {
+    const sp=speciesForEntry(e)||{};
+    const groups={Level:[],Egg:[],TM:[],Tutor:[],Legacy:[]};
+    for(const raw of (sp.moves||[])){
+      const [source,...rest]=String(raw).split(':'); const move=rest.join(':');
+      const key={1:'Level',egg:'Egg',tm:'TM',tutor:'Tutor',legacy:'Legacy'}[source]||source||'Other';
+      (groups[key] ||= []).push(source==='1' ? `Level ${move}` : move);
+    }
+    return Object.entries(groups).filter(([,v])=>v.length);
+  };
+  const detailHistoryFor = e => activityLog().filter(x=>x.entryId===e.id && ['caught','uncaught','favorite','unfavorite','team_add','team_remove','evolved','traded'].includes(x.type)).sort((a,b)=>b.ts-a.ts).slice(0,30);
+  const detailHistoryHtml = e => {
+    const rows=detailHistoryFor(e);
+    const labels={caught:'Caught',uncaught:'Removed from collection',favorite:'Added to favorites',unfavorite:'Removed from favorites',team_add:'Added to team',team_remove:'Removed from team',evolved:'Evolved',traded:'Traded'};
+    if(!rows.length) return `<div class="empty-panel">No personal history recorded for this Pokémon yet.</div>`;
+    return `<div class="detail-history-list">${rows.map(x=>{const d=new Date(x.ts);return `<div class="detail-history-row"><span class="detail-history-dot ${escHtml(x.type)}"></span><div><b>${escHtml(labels[x.type]||x.type)}</b><small>${d.toLocaleDateString()} · ${d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</small></div></div>`}).join('')}</div>`;
+  };
+  const detailMovesHtml = e => {
+    const groups=detailMoveGroupsFor(e);
+    if(!groups.length) return `<div class="empty-panel">No move data available in the local Cobblemon species data.</div>`;
+    return `<div class="detail-move-groups">${groups.map(([g,moves])=>`<section class="detail-move-group"><div class="detail-mini-heading"><b>${escHtml(g)}</b><span>${moves.length}</span></div><div class="chips detail-move-chips">${moves.map(m=>`<span class="chip">${escHtml(prettyLabel(m))}</span>`).join('')}</div></section>`).join('')}</div>`;
+  };
+  const detailBreedingHtml = e => {
+    const sp=speciesForEntry(e)||{};
+    const groups=(sp.eggGroups||[]).map(prettyLabel).join(', ')||'—';
+    const breeding=sp.breeding||{};
+    return `<div class="info-grid"><div class="info-item"><b>Egg groups</b><span>${escHtml(groups)}</span></div><div class="info-item"><b>Egg cycles</b><span>${sp.eggCycles??'—'}</span></div><div class="info-item"><b>Base friendship</b><span>${sp.baseFriendship??'—'}</span></div><div class="info-item"><b>Male ratio</b><span>${sp.maleRatio!=null?`${Math.round(Number(sp.maleRatio)*100)}% male`:'—'}</span></div><div class="info-item"><b>Base experience</b><span>${sp.baseExperienceYield??'—'}</span></div><div class="info-item"><b>EV yield</b><span>${Object.entries(sp.evYield||{}).filter(([,v])=>Number(v)>0).map(([k,v])=>`${prettyLabel(k)} +${v}`).join(', ')||'—'}</span></div></div>${Object.keys(breeding).length?`<div class="detail-data-note">${escHtml(JSON.stringify(breeding))}</div>`:''}`;
+  };
+
+  // Pokémon Info 2.0 — rich, data-backed and progressively hydrated.
   window.openInfo = function(id){
     const e=entries.find(x=>x.id===id); if(!e)return;
     const sp=speciesForEntry(e);
-    if(!sp){
-      $('#infoContent').innerHTML=`<div class="info-error">${T('noInfo')}</div>`;
-    } else {
-      // Navigate inside the collection the Pokémon was opened from.
-      const collection=pageEntries(tab);
-      const all=collection.length?collection:mainEntries();
-      const idx=Math.max(0,all.findIndex(x=>x.id===e.id));
-      const prev=all.length>1?all[(idx-1+all.length)%all.length]:null;
-      const next=all.length>1?all[(idx+1)%all.length]:null;
-      const types=entryTypes(e);
-      const caught=!!state[e.id], fav=!!favorites[e.id];
-      const variants=detailVariantsFor(e);
-      const gen=genFor(e);
-      const location=e.box?`Box ${e.box} · slot ${e.slot||'—'}`:'Special collection';
-      const collectionLabel=e.box?'Main LivingDex':(tab==='main'?'LivingDex':(DATA.pages?.[tab]?.title||tab||'Special collection'));
-      const formsHtml=variants.length?`
-        <div class="info-section"><div class="section-heading detail-section-heading"><div><span class="eyebrow">FORMS & VARIANTS</span><h3>Other entries for #${String(e.dex).padStart(3,'0')}</h3></div><span class="section-note">${variants.length} other ${variants.length===1?'entry':'entries'}</span></div>
-        <div class="detail-forms">${variants.map(v=>`<button class="detail-form-card" data-detail-form="${escHtml(v.id)}"><img src="${spritePath(v)}" alt="${escHtml(v.name)}"><span><b>${escHtml(v.name)}</b><small>${escHtml(v.form||'Base form')}</small></span></button>`).join('')}</div>
-      </div>`:'';
-      const navHtml=all.length>1?`<div class="detail-nav"><button id="detailPrev">← Previous</button><span>${idx+1} / ${all.length}</span><button id="detailNext">Next →</button></div>`:'';
-      $('#infoContent').innerHTML=`<div class="detail-hero">
-        <div class="detail-art"><img src="${spritePath(e)}" alt="${escHtml(e.name)}"></div>
-        <div class="detail-main">
-          <div class="eyebrow">POKÉDEX #${String(e.dex).padStart(3,'0')}</div><h2>${escHtml(e.name)}</h2>
-          ${e.form?`<p class="detail-form">${escHtml(e.form)}</p>`:''}
-          <div class="types detail-types">${types.map(t=>`<span class="type" style="${typeStyle(t)}">${escHtml(typeLabel(t))}</span>`).join('')}</div>
-          <div class="detail-status"><span class="detail-status-pill ${caught?'is-caught':''}">${caught?'✓ Caught':'○ Missing'}</span><span class="detail-status-pill ${fav?'is-favorite':''}">${fav?'★ Favorite':'☆ Not favorite'}</span></div>
-          <div class="detail-actions"><button id="detailCaught" class="${caught?'primary':'secondary'}">${caught?'✓ Caught':'Mark caught'}</button><button id="detailFav" class="secondary">${fav?'★ Favorite':'☆ Favorite'}</button><button id="detailTeam" class="secondary">${team.includes(e.id)?'✓ In Team':'＋ Add to Team'}</button></div>
-        </div>
-      </div>${navHtml}
-      <div class="info-section"><div class="section-heading detail-section-heading"><div><span class="eyebrow">OVERVIEW</span><h3>Pokédex information</h3></div></div><div class="info-grid">
-        <div class="info-item"><b>Generation</b><span>${gen?`Generation ${generationName(gen)}`:'Special / Cobblemon'}</span></div>
-        <div class="info-item"><b>Collection</b><span>${escHtml(collectionLabel)}</span></div>
-        <div class="info-item"><b>Location</b><span>${escHtml(location)}</span></div>
-        <div class="info-item"><b>Height</b><span>${sp.height!=null?(Number(sp.height)/10).toFixed(1)+' m':'—'}</span></div>
-        <div class="info-item"><b>Weight</b><span>${sp.weight!=null?(Number(sp.weight)/10).toFixed(1)+' kg':'—'}</span></div>
-        <div class="info-item"><b>Abilities</b><span>${escHtml((sp.abilities||[]).join(', ')||'—')}</span></div>
-      </div></div>${formsHtml}
-      <div class="info-section"><div class="section-heading detail-section-heading"><div><span class="eyebrow">EVOLUTION</span><h3>Evolution line</h3></div></div><div id="detailEvolutionPanel"><div class="detail-lazy-placeholder">Evolution data loads when you open this tab.</div></div></div>
-      <div class="info-tabs"><button class="info-tab active" data-panel="stats">Base stats</button><button class="info-tab" data-panel="spawn">Spawn</button><button class="info-tab" data-panel="breeding">Breeding</button><button class="info-tab" data-panel="notes">My note</button></div>
-      <div class="info-panel active" data-panel-content="stats">${statHtml(sp)}</div>
-      <div class="info-panel" data-panel-content="spawn"><div class="detail-lazy-placeholder">Spawn data loads when this tab is opened.</div></div>
-      <div class="info-panel" data-panel-content="breeding"><div class="info-grid"><div class="info-item"><b>Egg groups</b><span>${escHtml((sp.eggGroups||[]).map(prettyLabel).join(', ')||'—')}</span></div><div class="info-item"><b>Experience group</b><span>${escHtml(prettyLabel(sp.experienceGroup||'')||'—')}</span></div><div class="info-item"><b>Base friendship</b><span>${sp.baseFriendship??'—'}</span></div></div></div>
-      <div class="info-panel" data-panel-content="notes"><textarea id="pokemonNote" class="note-box">${escHtml(notes[e.id]||'')}</textarea><button id="saveNote" class="primary note-save">Save note</button></div>`;
-      bindInfoTabs();
-      const hydrateDetailPanel=panel=>{if(panel==='evolution'){const el=$('#detailEvolutionPanel');if(el&&!el.dataset.loaded){el.innerHTML=detailEvolutionFor(e);el.dataset.loaded='1';}} if(panel==='spawn'){const el=document.querySelector('[data-panel-content="spawn"]');if(el&&!el.dataset.loaded){const rows=detailSpawnFor(e);el.innerHTML=rows.length?rows.map(spawnCard).join(''):`<div class="empty-panel">No standard Cobblemon spawn entry.</div>`;el.dataset.loaded='1';}}};
-      $$('#infoDropdown .info-tab').forEach(t=>t.addEventListener('click',()=>hydrateDetailPanel(t.dataset.panel)));
-      // Evolution Line is a section, not a tab. Hydrate it after the modal has
-      // painted so opening a Pokémon never blocks on the evolution graph.
-      const hydrateEvolution=()=>{
-        if(!document.body.classList.contains('modal-open')) return;
-        const evoEl=$('#detailEvolutionPanel');
-        if(!evoEl || evoEl.dataset.loaded) return;
-        evoEl.innerHTML=detailEvolutionFor(e);
-        evoEl.dataset.loaded='1';
-        evoEl.querySelectorAll('[data-evo-entry]').forEach(btn=>{
-          btn.addEventListener('click',ev=>{
-            ev.preventDefault();
-            ev.stopPropagation();
-            const id=btn.dataset.evoEntry;
-            if(id) window.openInfo(id);
-          });
-        });
-      };
-      requestAnimationFrame(()=>{
-        // Give the browser a real interactive frame before calculating the
-        // evolution graph. requestIdleCallback keeps fast machines responsive;
-        // the timeout guarantees it also runs on browsers without idle support.
-        if(window.requestIdleCallback) requestIdleCallback(hydrateEvolution,{timeout:350});
-        else setTimeout(hydrateEvolution,80);
-      });
-      $('#detailCaught')?.addEventListener('click',()=>{const active=!state[e.id];if(active)state[e.id]=true;else delete state[e.id];recordActivity(active?'caught':'uncaught',{entryId:e.id,name:e.name});saveAll();touchDailyCompletion();openInfo(e.id);render();});
-      $('#detailFav')?.addEventListener('click',()=>{const active=!favorites[e.id];favorites[e.id]=active;if(!active)delete favorites[e.id];recordActivity(active?'favorite':'unfavorite',{entryId:e.id,name:e.name});saveAll();openInfo(e.id);});
-      $('#detailTeam')?.addEventListener('click',()=>{
-        if(team.includes(e.id)){
-          toggleTeam(e.id);
-          openInfo(e.id);
-          return;
-        }
-        if(team.length>=6){
-          alert('Your team is already full (6/6). Remove a Pokémon before adding another one.');
-          return;
-        }
-        toggleTeam(e.id);
-        openInfo(e.id);
-      });
-      $('#detailPrev')?.addEventListener('click',()=>prev&&openInfo(prev.id));
-      $('#detailNext')?.addEventListener('click',()=>next&&openInfo(next.id));
-      $('#saveNote')?.addEventListener('click',()=>{notes[e.id]=$('#pokemonNote').value;saveAll();$('#saveNote').textContent='Saved ✓';});
-      $$('[data-detail-form]').forEach(b=>b.onclick=()=>openInfo(b.dataset.detailForm));
-    }
+    if(!sp){ $('#infoContent').innerHTML=`<div class="info-error">${T('noInfo')}</div>`; $('#infoOverlay').hidden=false;$('#infoDropdown').hidden=false;return; }
+    const collection=pageEntries(tab), all=collection.length?collection:mainEntries();
+    const idx=Math.max(0,all.findIndex(x=>x.id===e.id));
+    const prev=all.length>1?all[(idx-1+all.length)%all.length]:null, next=all.length>1?all[(idx+1)%all.length]:null;
+    const types=entryTypes(e), caught=!!state[e.id], fav=!!favorites[e.id], variants=detailVariantsFor(e), gen=genFor(e);
+    const [rarity,rarityClass]=detailRarityFor(e);
+    const historyCount=detailHistoryFor(e).length;
+    const location=e.box?`Box ${e.box} · slot ${e.slot||'—'}`:'Special collection';
+    const collectionLabel=e.box?'Main LivingDex':(tab==='main'?'LivingDex':(DATA.pages?.[tab]?.title||tab||'Special collection'));
+    const formsHtml=variants.length?`<div class="info-section"><div class="section-heading detail-section-heading"><div><span class="eyebrow">FORMS & VARIANTS</span><h3>Other entries for #${String(e.dex).padStart(3,'0')}</h3></div><span class="section-note">${variants.length} other</span></div><div class="detail-forms">${variants.map(v=>`<button class="detail-form-card" data-detail-form="${escHtml(v.id)}"><img loading="lazy" decoding="async" src="${spritePath(v)}" alt="${escHtml(v.name)}"><span><b>${escHtml(v.name)}</b><small>${escHtml(v.form||'Base form')}</small></span></button>`).join('')}</div></div>`:'';
+    const navHtml=all.length>1?`<div class="detail-nav"><button id="detailPrev">← Previous</button><span>${idx+1} / ${all.length}</span><button id="detailNext">Next →</button></div>`:'';
+    $('#infoContent').innerHTML=`<div class="detail-hero">
+      <div class="detail-art"><img loading="eager" decoding="async" src="${spritePath(e)}" alt="${escHtml(e.name)}"></div>
+      <div class="detail-main"><div class="eyebrow">POKÉDEX #${String(e.dex).padStart(3,'0')}</div><h2>${escHtml(e.name)}</h2>${e.form?`<p class="detail-form">${escHtml(e.form)}</p>`:''}<div class="types detail-types">${types.map(t=>`<span class="type" style="${typeStyle(t)}">${escHtml(typeLabel(t))}</span>`).join('')}</div><div class="detail-rarity-pill ${rarityClass}">✦ ${escHtml(rarity)}</div><div class="detail-status"><span class="detail-status-pill ${caught?'is-caught':''}">${caught?'✓ Currently owned':'○ Not currently owned'}</span><span class="detail-status-pill ${fav?'is-favorite':''}">${fav?'★ Favorite':'☆ Not favorite'}</span></div><div class="detail-actions"><button id="detailCaught" class="${caught?'primary':'secondary'}">${caught?'✓ Caught':'Mark caught'}</button><button id="detailFav" class="secondary">${fav?'★ Favorite':'☆ Favorite'}</button><button id="detailTeam" class="secondary">${team.includes(e.id)?'✓ In Team':'＋ Add to Team'}</button></div></div>
+    </div>${navHtml}
+    <div class="info-section"><div class="section-heading detail-section-heading"><div><span class="eyebrow">OVERVIEW</span><h3>Pokédex information</h3></div></div><div class="info-grid"><div class="info-item"><b>Generation</b><span>${gen?`Generation ${generationName(gen)}`:'Special / Cobblemon'}</span></div><div class="info-item"><b>Collection</b><span>${escHtml(collectionLabel)}</span></div><div class="info-item"><b>Location</b><span>${escHtml(location)}</span></div><div class="info-item"><b>Height</b><span>${sp.height!=null?(Number(sp.height)/10).toFixed(1)+' m':'—'}</span></div><div class="info-item"><b>Weight</b><span>${sp.weight!=null?(Number(sp.weight)/10).toFixed(1)+' kg':'—'}</span></div><div class="info-item"><b>Abilities</b><span>${escHtml((sp.abilities||[]).join(', ')||'—')}</span></div><div class="info-item"><b>Base experience</b><span>${sp.baseExperienceYield??'—'}</span></div><div class="info-item"><b>Catch rate</b><span>${sp.catchRate??'—'}</span></div><div class="info-item"><b>Personal history</b><span>${historyCount?`${historyCount} recorded event${historyCount===1?'':'s'}`:'No events yet'}</span></div></div></div>${formsHtml}
+    <div class="info-section"><div class="section-heading detail-section-heading"><div><span class="eyebrow">EVOLUTION</span><h3>Evolution line</h3></div><span class="section-note">Lazy loaded</span></div><div id="detailEvolutionPanel"><div class="detail-lazy-placeholder">Evolution data loads after the Pokémon view is painted.</div></div></div>
+    <div class="info-tabs"><button class="info-tab active" data-panel="stats">Base stats</button><button class="info-tab" data-panel="spawn">Spawn</button><button class="info-tab" data-panel="breeding">Breeding</button><button class="info-tab" data-panel="moves">Moves</button><button class="info-tab" data-panel="history">History</button><button class="info-tab" data-panel="notes">Notes</button></div>
+    <div class="info-panel active" data-panel-content="stats"><div class="detail-stat-summary"><span>Base stat total <b>${Object.values(sp.baseStats||{}).reduce((a,v)=>a+Number(v||0),0)}</b></span><span>EV yield <b>${Object.values(sp.evYield||{}).reduce((a,v)=>a+Number(v||0),0)}</b></span></div>${statHtml(sp)}</div>
+    <div class="info-panel" data-panel-content="spawn"><div class="detail-lazy-placeholder">Spawn data loads when this tab is opened.</div></div>
+    <div class="info-panel" data-panel-content="breeding"><div class="detail-lazy-placeholder">Breeding data loads when this tab is opened.</div></div>
+    <div class="info-panel" data-panel-content="moves"><div class="detail-lazy-placeholder">Move data loads when this tab is opened.</div></div>
+    <div class="info-panel" data-panel-content="history"><div class="detail-lazy-placeholder">Personal history loads when this tab is opened.</div></div>
+    <div class="info-panel" data-panel-content="notes"><div class="detail-lazy-placeholder">Your personal note loads when this tab is opened.</div></div>`;
+    bindInfoTabs();
+    const hydrateDetailPanel=panel=>{
+      if(panel==='evolution'){const el=$('#detailEvolutionPanel');if(el&&!el.dataset.loaded){el.innerHTML=detailEvolutionFor(e);el.dataset.loaded='1';}}
+      if(panel==='spawn'){const el=document.querySelector('[data-panel-content="spawn"]');if(el&&!el.dataset.loaded){const list=detailSpawnFor(e);el.innerHTML=list.length?list.map(spawnCard).join(''):`<div class="empty-panel">${T('noSpawn')}</div>`;el.dataset.loaded='1';}}
+      if(panel==='breeding'){const el=document.querySelector('[data-panel-content="breeding"]');if(el&&!el.dataset.loaded){el.innerHTML=detailBreedingHtml(e);el.dataset.loaded='1';}}
+      if(panel==='moves'){const el=document.querySelector('[data-panel-content="moves"]');if(el&&!el.dataset.loaded){el.innerHTML=detailMovesHtml(e);el.dataset.loaded='1';}}
+      if(panel==='history'){const el=document.querySelector('[data-panel-content="history"]');if(el&&!el.dataset.loaded){el.innerHTML=detailHistoryHtml(e);el.dataset.loaded='1';}}
+      if(panel==='notes'){const el=document.querySelector('[data-panel-content="notes"]');if(el&&!el.dataset.loaded){el.innerHTML=`<textarea id="pokemonNote" class="note-box" maxlength=1000 placeholder="${language==='nl'?'Schrijf hier je eigen notitie...':'Write your own note...'}">${escHtml(notes[e.id]||'')}</textarea><button id="saveNote" class="primary note-save">${language==='nl'?'Opslaan':'Save note'}</button>`;el.dataset.loaded='1';$('#saveNote')?.addEventListener('click',()=>{notes[e.id]=$('#pokemonNote').value;saveAll();$('#saveNote').textContent=language==='nl'?'Opgeslagen ✓':'Saved ✓';});}}
+    };
+    $$('#infoDropdown .info-tab').forEach(t=>t.addEventListener('click',()=>hydrateDetailPanel(t.dataset.panel)));
+    $$('#infoContent [data-detail-form]').forEach(b=>b.onclick=()=>openInfo(b.dataset.detailForm));
+    $$('#infoContent [data-evo-entry]').forEach(b=>b.onclick=()=>openInfo(b.dataset.evoEntry));
+    $('#detailCaught')?.addEventListener('click',()=>{const active=!state[e.id];if(active)state[e.id]=true;else delete state[e.id];recordActivity(active?'caught':'uncaught',{entryId:e.id,name:e.name});saveAll();touchDailyCompletion();openInfo(e.id);render();});
+    $('#detailFav')?.addEventListener('click',()=>{const active=!favorites[e.id];favorites[e.id]=active;if(!active)delete favorites[e.id];recordActivity(active?'favorite':'unfavorite',{entryId:e.id,name:e.name});saveAll();openInfo(e.id);});
+    $('#detailTeam')?.addEventListener('click',()=>{if(team.includes(e.id)){toggleTeam(e.id);openInfo(e.id);return;}if(team.length>=6){alert('Your team is already full (6/6). Remove a Pokémon before adding another one.');return;}toggleTeam(e.id);openInfo(e.id);});
+    $('#detailPrev')?.addEventListener('click',()=>prev&&openInfo(prev.id)); $('#detailNext')?.addEventListener('click',()=>next&&openInfo(next.id));
     $('#infoOverlay').hidden=false;$('#infoDropdown').hidden=false;document.body.classList.add('modal-open');$('#infoDropdown').scrollTop=0;
+    requestAnimationFrame(()=>{if(!document.body.classList.contains('modal-open'))return;hydrateDetailPanel('evolution');});
   };
+
 
   // V1.4.1 Progress, Daily Dex and Milestones.
   const addDays = (key, delta) => { const d=new Date(`${key}T12:00:00`); d.setDate(d.getDate()+delta); return dailyDateKey(d); };
   const dailyStats = () => {
-    trainingStats.__daily ||= { streak:0, bestStreak:0, lastCompleted:'', totalCompleted:0, firstDate:'', history:{} };
+    trainingStats.__daily ||= { streak:0, bestStreak:0, lastCompleted:'', totalCompleted:0, firstDate:'', history:{}, duplicateHistory:{}, perfectMonths:{} };
     const ds=trainingStats.__daily;
     ds.history ||= {};
+    ds.duplicateHistory ||= {};
+    ds.perfectMonths ||= {};
     if(!ds.firstDate){
       if(ds.lastCompleted){
         const span=Math.max(1,Number(ds.streak||1));
@@ -186,9 +184,13 @@
   // always resolve the exact same Pokémon for a given date.
   function dailyDexEntryForDate(key){ return dailyEntryForDate(key); }
   function dailyDexEntry(){return dailyDexEntryForDate(dailyDateKey());}
+  function dailyCompletionFor(key, entry){
+    if(!entry) return false;
+    return !!state[entry.id] || !!dailyStats().duplicateHistory?.[key];
+  }
   function normalizeDailyStreak(){
     const ds=dailyStats(), key=dailyDateKey();
-    ds.history[key]=!!(dailyDexEntry() && state[dailyDexEntry().id]);
+    ds.history[key]=dailyCompletionFor(key,dailyDexEntry());
     if(ds.lastCompleted && ds.lastCompleted!==key && ds.lastCompleted!==addDays(key,-1)){
       ds.streak=0;
       ds.lastCompleted='';
@@ -207,14 +209,14 @@
     }
     // The current day always reflects the live collection state.
     const current=dailyDexEntry();
-    ds.history[today]=!!(current && state[current.id]);
+    ds.history[today]=dailyCompletionFor(today,current);
     return ds;
   }
   function syncDailyCompletion(entry=dailyDexEntry()){
     const before=JSON.stringify(trainingStats.__daily||{});
     const ds=normalizeDailyStreak(), key=dailyDateKey();
     backfillDailyHistory();
-    const completed=!!(entry && state[entry.id]);
+    const completed=dailyCompletionFor(key,entry);
     ds.history[key]=completed;
     if(completed && ds.lastCompleted!==key){
       ds._streakBeforeToday=Number(ds.streak||0);
@@ -244,6 +246,34 @@
       return true;
     }
     return false;
+  }
+  function monthKeyFromDate(key){ return String(key||'').slice(0,7); }
+  function monthCompletionCount(year,month){
+    const ds=dailyStats(), total=monthDays(year,month), today=dailyDateKey();
+    let complete=0;
+    for(let day=1;day<=total;day++){ const key=`${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`; if(compareDateKey(key,today)<=0 && ds.history?.[key]) complete++; }
+    return {complete,total};
+  }
+  function syncCalendarMilestones(){
+    const ds=dailyStats(), now=new Date(), today=dailyDateKey();
+    for(let offset=0;offset<18;offset++){
+      const d=new Date(now.getFullYear(),now.getMonth()-offset,1), y=d.getFullYear(), m=d.getMonth(), key=`${y}-${String(m+1).padStart(2,'0')}`;
+      const {complete,total}=monthCompletionCount(y,m);
+      if(total && complete===total && `${key}-31` < today){
+        if(!ds.perfectMonths[key]){ ds.perfectMonths[key]={completedAt:Date.now()}; recordActivity('perfect_month',{month:key}); }
+      }
+    }
+    saveTraining(false);
+  }
+  function completeDailyDuplicate(){
+    const key=dailyDateKey(), entry=dailyDexEntry(), ds=dailyStats();
+    if(!entry || !state[entry.id] || ds.duplicateHistory[key]) return false;
+    ds.duplicateHistory[key]=true;
+    recordActivity('daily_duplicate',{entryId:entry.id,name:entry.name,text:`Logged duplicate Catch Calendar catch: ${entry.name}`});
+    syncDailyCompletion(entry);
+    saveTraining();
+    renderDailyDex();
+    return true;
   }
   const touchDailyCompletion=syncDailyCompletion;
   function trainingSummaryFrom(sourceTraining=trainingStats){
@@ -364,9 +394,13 @@
     else if(a.type==='unfavorite') text='Removed '+name+' from favorites';
     else if(a.type==='team_add') text='Added '+name+' to team';
     else if(a.type==='team_remove') text='Removed '+name+' from team';
+    else if(a.type==='evolved') text=(typeof greetingName==='function'?greetingName():'Trainer')+' evolved '+(a.sourceName||'a Pokémon')+' → '+name;
+    else if(a.type==='traded') text=(typeof greetingName==='function'?greetingName():'Trainer')+' traded his '+(a.sourceName||'a Pokémon')+' for a '+name;
     else if(a.type==='training_complete') text='Completed '+(modeNames[a.mode]||'Training')+' ('+(a.score||0)+'/'+(a.total||10)+')';
     else if(a.type==='daily_complete') text='Completed Daily Dex'+(name?' ('+name+')':'');
     else if(a.type==='daily_uncomplete') text='Daily Dex completion undone'+(name?' ('+name+')':'');
+    else if(a.type==='daily_duplicate') text='Logged duplicate catch'+(name?' ('+name+')':'');
+    else if(a.type==='perfect_month') text='Completed a Perfect Month'+(a.month?' ('+a.month+')':'');
     return {time:t,text,entry};
   }
   function openDailyDay(key){
@@ -403,6 +437,7 @@
   }
   function renderDailyDex(){
     syncDailyCompletion();
+    syncCalendarMilestones();
     backfillDailyHistory();
     const ds=dailyStats(), today=dailyDateKey();
     const minMonth=ds.firstDate ? new Date(`${ds.firstDate}T12:00:00`) : new Date();
@@ -428,9 +463,15 @@
     }
     const canGoNext = true;
     const firstTracked=ds.firstDate;
+    const seasonKey=`${y}-${String(m+1).padStart(2,'0')}`;
+    const seasonComplete=monthComplete;
+    const seasonTarget=Math.max(7,Math.min(totalDays,20));
+    const seasonProgress=Math.min(seasonTarget,seasonComplete);
+    const perfectCount=Object.keys(ds.perfectMonths||{}).length;
+    const todayEntry=dailyDexEntry(), todayOwned=!!(todayEntry&&state[todayEntry.id]), duplicateDone=!!ds.duplicateHistory?.[today];
     $('#view').innerHTML=`<div class="page-card daily-calendar-page">
       <div class="daily-calendar-hero">
-        <div><div class="eyebrow">CATCH CALENDAR</div><h2>Catch Calendar</h2><p>One Pokémon every day. Keep the chain alive and build your streak.</p></div>
+        <div><div class="eyebrow">CATCH CALENDAR 2.0</div><h2>Catch Calendar</h2><p>One Pokémon every day. Keep the chain alive, earn milestones and build your Trainer journey.</p></div>
         <div class="daily-hero-actions"><div class="daily-next-card"><span>⏱ NEXT CATCH</span><strong data-daily-countdown>00:00:00</strong><small>New challenge at midnight</small></div><div class="daily-streak-hero"><span>🔥 Current streak</span><strong>${Number(ds.streak||0)}</strong><small>Best ${Number(ds.bestStreak||0)} days</small></div></div>
       </div>
       <section class="daily-calendar-panel">
@@ -439,10 +480,10 @@
         <div class="daily-weekdays">${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(x=>`<span>${x}</span>`).join('')}</div>
         <div class="daily-calendar-grid">${cells.join('')}</div>
       </section>
-      <section class="daily-insight-grid">
+      <section class="daily-season-card"><div><span class="eyebrow">CURRENT SEASON</span><h3>${monthName(y,m)} Season</h3><p>Season progress is based on completed Calendar days. No separate season-completion reward.</p></div><div class="daily-season-progress"><strong>${seasonProgress} / ${seasonTarget}</strong><div class="daily-season-track"><i style="width:${Math.round(seasonProgress/Math.max(1,seasonTarget)*100)}%"></i></div><small>${seasonTarget-seasonProgress>0?`${seasonTarget-seasonProgress} days to the season target`:'Season target reached'}</small></div></section><section class="daily-duplicate-card ${todayOwned?'available':''} ${duplicateDone?'done':''}"><div><span class="eyebrow">TODAY'S CATCH</span><h3>${todayEntry?escHtml(todayEntry.name):'Catch Calendar'}</h3><p>${duplicateDone?'Duplicate catch logged. You can still keep your collection unchanged.':todayOwned?'You already own today’s Pokémon. Log a duplicate catch to complete today without changing your collection.':'Catch today’s Pokémon to complete the Calendar.'}</p></div>${todayOwned&&!duplicateDone?'<button class="primary" id="dailyDuplicateBtn">Log Duplicate Catch</button>':`<span class="daily-duplicate-state">${duplicateDone?'✓ Completed':'Collection catch'}</span>`}</section><section class="daily-insight-grid">
         <article><span class="eyebrow">TOTAL COMPLETED</span><strong>${Number(ds.totalCompleted||0)}</strong><small>Catch Calendar days completed</small></article>
         <article><span class="eyebrow">THIS MONTH</span><strong>${totalDays ? Math.round(monthComplete/Math.max(1,monthComplete+monthMissed+monthPending)*100) : 0}%</strong><small>${monthComplete} completed days</small></article>
-        <article><span class="eyebrow">BEST STREAK</span><strong>${Number(ds.bestStreak||0)}</strong><small>Longest consecutive streak</small></article>
+        <article><span class="eyebrow">BEST STREAK</span><strong>${Number(ds.bestStreak||0)}</strong><small>Longest consecutive streak</small></article><article><span class="eyebrow">PERFECT MONTHS</span><strong>${perfectCount}</strong><small>Every Calendar day completed</small></article>
         <article><span class="eyebrow">TRACKING SINCE</span><strong>${firstTracked?new Intl.DateTimeFormat('en-GB',{day:'numeric',month:'short',year:'numeric'}).format(new Date(`${firstTracked}T12:00:00`)):'Today'}</strong><small>Your Catch Calendar journey</small></article>
       </section>
     </div>`;
@@ -463,6 +504,7 @@
       if(dailyCalendarMonth>11){dailyCalendarMonth=0;dailyCalendarYear++;}
       renderDailyDex();
     });
+    $('#dailyDuplicateBtn')?.addEventListener('click',completeDailyDuplicate);
     $$('[data-daily-date]').forEach(b=>b.addEventListener('click',(ev)=>{
       const key=b.dataset.dailyDate, entry=dailyEntryForDate(key);
       if(ev.target.closest('.daily-day-art, .daily-day-art img')){ ev.preventDefault(); ev.stopPropagation(); if(entry) openInfo(entry.id); return; }
@@ -480,17 +522,18 @@
     const specialKeys=['vivillon','unown','furfrou','floette','minior','cobblemon-unique','arbok-patterns','minecraft-forms','magikarp-jump'];
     const specialNames={vivillon:'Vivillon',unown:'Unown',furfrou:'Furfrou',floette:'Floette',minior:'Minior','cobblemon-unique':'Cobblemon Unique','arbok-patterns':'Arbok Patterns','minecraft-forms':'Minecraft Forms','magikarp-jump':'Magikarp & Gyarados Jump'};
     const special=specialKeys.map(k=>{const list=pageEntries(k),got=list.filter(e=>state[e.id]).length;return {name:specialNames[k],got,total:list.length,p:pct(got,list.length)}}).filter(x=>x.total);
-    const s2={...s,generations,types}, d=s.daily, daily=dailyDexEntry(), dailyDone=!!(daily&&state[daily.id]);
+    const s2={...s,generations,types}, d=s.daily, daily=dailyDexEntry(), dailyDone=dailyCompletionFor(dailyDateKey(),daily), dailyOwned=!!(daily&&state[daily.id]), dailyDuplicateDone=!!dailyStats().duplicateHistory?.[dailyDateKey()];
     const milestones=milestoneDefinitions(s2), unlocked=milestones.filter(m=>m.unlocked).length;
     $('#view').innerHTML=`<div class="page-card progress-plus v14-progress">
       <div class="achievement-hero"><div><div class="eyebrow">COLLECTION DASHBOARD</div><h2>Progress</h2><p>${escHtml(greetingName())}'s complete LivingDex overview.</p></div><div class="achievement-total"><strong>${s.mainCaught}</strong><span>/ ${s.mainTotal} main caught</span><i style="width:${pct(s.mainCaught,s.mainTotal)}%"></i></div></div>
       <section class="progress-stat-grid"><div><b>${s.caught}</b><span>Total caught</span></div><div><b>${s.missing}</b><span>Total missing</span></div><div><b>${pct(s.caught,s.total)}%</b><span>Total complete</span></div><div><b>${s.favoriteCount}</b><span>Favorites</span></div><div><b>${s.fullBoxes}</b><span>Full boxes</span></div><div class="stat-accent"><b>${d.streak||0}</b><span>Daily streak</span></div></section>
-      <section class="daily-dex-card ${dailyDone?'daily-complete':''}"><div class="daily-dex-art">${daily?`<img src="${spritePath(daily)}" alt="${escHtml(daily.name)}">`:''}</div><div class="daily-dex-copy"><span class="eyebrow">CATCH CALENDAR • ${escHtml(dailyDateKey())}</span><h3>${daily?escHtml(daily.name):'Catch Calendar'}</h3><p>${dailyDone?'Completed today. Keep the streak alive tomorrow.':'Complete today’s Catch Calendar by having this Pokémon in your collection.'}</p><div class="daily-meta"><span class="daily-status">${dailyDone?'✓ Completed today':'○ Not completed today'}</span><span>🔥 ${d.streak||0} day streak</span><span>Best ${d.bestStreak||0}</span></div></div><button id="dailyDexView" class="secondary" ${daily?'':'disabled'}>View Pokémon</button></section>
+      <section class="daily-dex-card ${dailyDone?'daily-complete':''}"><div class="daily-dex-art">${daily?`<img src="${spritePath(daily)}" alt="${escHtml(daily.name)}">`:''}</div><div class="daily-dex-copy"><span class="eyebrow">CATCH CALENDAR • ${escHtml(dailyDateKey())}</span><h3>${daily?escHtml(daily.name):'Catch Calendar'}</h3><p>${dailyDone?(dailyDuplicateDone?'Duplicate catch logged today. Keep the streak alive tomorrow.':'Completed today. Keep the streak alive tomorrow.'):dailyOwned?'You already own today’s Pokémon — log a duplicate catch to complete today.':'Complete today’s Catch Calendar by having this Pokémon in your collection.'}</p><div class="daily-meta"><span class="daily-status">${dailyDone?'✓ Completed today':'○ Not completed today'}</span><span>🔥 ${d.streak||0} day streak</span><span>Best ${d.bestStreak||0}</span></div></div>${dailyOwned&&!dailyDuplicateDone?'<button id="dailyDuplicateProgress" class="primary">Log Duplicate Catch</button>':''}<button id="dailyDexView" class="secondary" ${daily?'':'disabled'}>View Pokémon</button></section>
       <section class="achievement-section"><div class="section-heading"><div><span class="eyebrow">GENERATIONS</span><h3>Generation completion</h3></div><span class="section-note">${generations.filter(x=>x.got===x.total).length} / ${generations.length} complete</span></div><div class="progress-grid generation-progress">${generations.map(x=>`<article class="progress-card ${x.got===x.total?'progress-complete':''}"><div class="progress-card-top"><span>Generation ${generationName(x.g)}</span><strong>${x.got} / ${x.total}</strong></div><div class="progress-track"><i style="width:${x.p}%"></i></div><small>${x.p}% complete</small></article>`).join('')}</div></section>
       <section class="achievement-section"><div class="section-heading"><div><span class="eyebrow">TYPES</span><h3>Completion per type</h3></div><span class="section-note">${types.filter(x=>x.got===x.total).length} / ${types.length} complete</span></div><div class="progress-grid type-progress">${types.map(x=>`<article class="progress-card ${x.got===x.total?'progress-complete':''}"><div class="progress-card-top"><span class="knowledge-chip mini" style="${typeStyle(x.t)}">${escHtml(typeLabel(x.t))}</span><strong>${x.got} / ${x.total}</strong></div><div class="progress-track"><i style="width:${x.p}%"></i></div><small>${x.p}% complete</small></article>`).join('')}</div></section>
       <section class="achievement-section"><div class="section-heading"><div><span class="eyebrow">SPECIAL COLLECTIONS</span><h3>Special forms</h3></div></div><div class="progress-grid special-progress">${special.map(x=>`<article class="progress-card ${x.got===x.total?'progress-complete':''}"><div class="progress-card-top"><span>${escHtml(x.name)}</span><strong>${x.got} / ${x.total}</strong></div><div class="progress-track"><i style="width:${x.p}%"></i></div><small>${x.p}% complete</small></article>`).join('')}</div></section>
       <section class="progress-footer-grid"><article class="progress-summary-card"><div class="summary-icon">🏅</div><div><span class="eyebrow">MILESTONES</span><h3>${unlocked} / ${milestones.length} badges earned</h3><p>Badges for collection, Catch Calendar and Training achievements.</p></div><button id="progressMilestones" class="secondary">View Milestones</button></article><article class="progress-summary-card"><div class="summary-icon">◎</div><div><span class="eyebrow">TRAINING</span><h3>${escHtml(s.training.rank)} Rank</h3><p>${s.training.totalQuestions} questions · ${s.training.accuracy}% accuracy · best ${s.training.bestScore}/10</p></div><button id="progressTraining" class="secondary">Open Training</button></article></section>
     </div>`;
+    $('#dailyDuplicateProgress')?.addEventListener('click',completeDailyDuplicate);
     $('#dailyDexView')?.addEventListener('click',()=>daily&&openInfo(daily.id));
     $('#progressMilestones')?.addEventListener('click',()=>window.LivingDexNavigate?.('milestones'));
     $('#progressTraining')?.addEventListener('click',()=>window.LivingDexNavigate?.('training'));
@@ -590,19 +633,276 @@
     $$('[data-remove-type]').forEach(b=>b.onclick=()=>{window.knowledgeTypes=selected.filter(x=>x!==b.dataset.removeType);renderTypeKnowledge();});
   };
 
+  // ================================================================
+  // V2.0.0 — TRAINER OS FOUNDATION
+  // New shell/navigation/home layered over the stable V1.7.15 core.
+  // ================================================================
+  const V2_NAV = [
+    ['home','⌂','Home'],
+    ['dex','▦','LivingDex'],
+    ['daily','◷','Catch Calendar'],
+    ['training','⚔','Training'],
+    ['team','◇','Team Builder'],
+    ['types','◈','Type Knowledge'],
+    ['achievements','★','Progress'],
+    ['stats','◌','Statistics'],
+    ['goals','◎','Goals'],
+    ['activity','≡','Activity'],
+    ['profile','◉','Trainer'],
+    ['players','◎','Players'],
+    ['leaderboard','♛','Leaderboard']
+  ];
+  function v2Profile(){
+    try{return JSON.parse(localStorage.getItem('cobblemon-livingdex-profile')||'{}')||{};}catch{return {};}
+  }
+  function v2Name(){return String(v2Profile().name||greetingName?.()||'Trainer').trim()||'Trainer';}
+  function v2CaughtCount(){return entries.filter(e=>!!state[e.id]).length;}
+  function v2MainCount(){return pageEntries('main').length||entries.length;}
+  function v2Pct(a,b){return b?Math.round(a/b*100):0;}
+  function v2IconNav(active){
+    const primary=V2_NAV.filter(x=>['home','dex','daily','training','team','types'].includes(x[0]));
+    const journey=V2_NAV.filter(x=>['achievements','stats','goals','activity'].includes(x[0]));
+    const social=V2_NAV.filter(x=>['profile','players','leaderboard'].includes(x[0]));
+    const button=([id,icon,label])=>`<button class="v2-nav-item ${active===id?'active':''}" data-v2-view="${id}"><span class="v2-nav-icon">${icon}</span><span>${label}</span></button>`;
+    const section=(label,items)=>`<div class="v2-nav-section"><span class="v2-nav-section-label">${label}</span>${items.map(button).join('')}</div>`;
+    const side=document.querySelector('#v2SidebarNav');
+    if(side) side.innerHTML=section('TRAINER HUB',primary)+section('JOURNEY',journey)+section('SOCIAL',social);
+    const mobileItems=[V2_NAV.find(x=>x[0]==='home'),V2_NAV.find(x=>x[0]==='dex'),V2_NAV.find(x=>x[0]==='daily'),V2_NAV.find(x=>x[0]==='training'),V2_NAV.find(x=>x[0]==='profile')];
+    const mobile=document.querySelector('#v2MobileNav');
+    if(mobile) mobile.innerHTML=mobileItems.map(([id,icon,label])=>`<button class="v2-mobile-item ${active===id?'active':''}" data-v2-view="${id}"><span>${icon}</span><small>${id==='profile'?'Trainer':label}</small></button>`).join('');
+    document.querySelectorAll('[data-v2-view]').forEach(b=>b.onclick=()=>v2Navigate(b.dataset.v2View));
+  }
+  function v2Navigate(target){
+    closeInfo();
+    if(target==='profile'){ if(window.openProfileView)window.openProfileView(); else if(typeof openProfileOptions==='function')openProfileOptions(); return; }
+    if(['players','leaderboard'].includes(target)){
+      view=target; v2IconNav(target); renderTopNav(); renderView(); return;
+    }
+    view=target; v2IconNav(target); renderTopNav(); renderView();
+  }
+  function v2DailySnapshot(){
+    try{ window.touchDailyCompletion?.(); }catch{}
+    const d=trainingStats?.__daily||{};
+    return {streak:Number(d.streak||0),bestStreak:Number(d.bestStreak||0),totalCompleted:Number(d.totalCompleted||0),lastCompleted:String(d.lastCompleted||'')};
+  }
+  function v2ActivityText(a){
+    const name=a?.name||a?.entryName||'';
+    const source=a?.sourceName||'';
+    switch(a?.type){
+      case 'caught': return name?`Caught ${name}`:'Caught a Pokémon';
+      case 'uncaught': return name?`Removed ${name} from the collection`:'Removed a Pokémon from the collection';
+      case 'favorite': return name?`Added ${name} to favorites`:'Added a favorite';
+      case 'unfavorite': return name?`Removed ${name} from favorites`:'Removed a favorite';
+      case 'evolved': return source&&name?`${source} evolved into ${name}`:name?`Evolved into ${name}`:'Completed an evolution';
+      case 'traded': return source&&name?`Traded ${source} for ${name}`:name?`Traded for ${name}`:'Completed a trade';
+      case 'daily_complete': return name?`Completed Catch Calendar with ${name}`:'Completed today’s Catch Calendar';
+      case 'daily_duplicate': return name?`Logged duplicate Catch Calendar catch: ${name}`:'Logged a duplicate Catch Calendar catch';
+      case 'daily_uncomplete': return name?`Catch Calendar completion removed for ${name}`:'Catch Calendar completion removed';
+      case 'training_complete': return `Training complete · ${Number(a.score||0)}/${Number(a.total||10)}`;
+      case 'daily_xp': return a.text||'Completed today’s Catch Calendar mission · +100 XP';
+      case 'perfect_month': return a.month?`Completed a perfect Catch Calendar month · ${a.month}`:'Completed a perfect Catch Calendar month';
+      default: return a?.text||a?.message||a?.type||'Trainer activity';
+    }
+  }
+  function v2XpSnapshot(){
+    const caught=v2CaughtCount();
+    const trainingQ=Number(trainingStats?.__timedQuestions||0);
+    const sessions=Number(trainingStats?.__trainingSessions||0);
+    const daily=v2DailySnapshot();
+    const streak=daily.streak;
+    const bonus=Number(trainingStats?.xp||0);
+    const xp=Math.max(0,caught*10+trainingQ*3+sessions*10+streak*8+bonus);
+    const level=Math.floor(xp/100)+1;
+    return {xp,level,intoLevel:xp%100,pct:xp%100};
+  }
+  function v2AwardDailyXp(){
+    const d=window.__dailyDexEntry?.(); if(!d||!state[d.id])return false;
+    const key='cobblemon-v2-daily-xp-'+new Date().toISOString().slice(0,10);
+    if(localStorage.getItem(key)==='1')return false;
+    trainingStats.xp=Number(trainingStats.xp||0)+100;
+    localStorage.setItem(key,'1'); saveTraining();
+    recordActivity('daily_xp',{text:`Completed today's Catch Calendar mission · +100 XP`,date:new Date().toLocaleDateString()});
+    return true;
+  }
+  function v2ActivityRows(limit=30){
+    const list=typeof activityLog==='function'?activityLog():[];
+    return list.slice().sort((a,b)=>Number(b.ts||0)-Number(a.ts||0)).slice(0,limit);
+  }
+  function renderV2Rewards(){
+    const s=collectionStats(), ms=milestoneDefinitions({...s,generations:v2GenerationStats(),types:[]}), unlocked=ms.filter(m=>m.unlocked), locked=ms.filter(m=>!m.unlocked);
+    const xp=v2XpSnapshot(), daily=v2DailySnapshot();
+    const cards=ms.map(m=>`<article class="v2-reward-card ${m.unlocked?'unlocked':'locked'}"><div class="v2-reward-art"><img loading="lazy" decoding="async" src="${escHtml(m.asset)}" alt="${escHtml(m.name)}"></div><div><b>${escHtml(m.name)}</b><p>${escHtml(m.desc)}</p></div><span>${m.unlocked?'EARNED':'LOCKED'}</span></article>`).join('');
+    $('#view').innerHTML=`<div class="page-card v2-rich-page v2-rewards-page"><div class="page-title"><div><div class="eyebrow">TRAINER REWARDS</div><h2>Rewards</h2><p>Milestones you have earned — and the next rewards waiting for you.</p></div><div class="v2-level-pill">LV ${xp.level}<span>${xp.xp.toLocaleString()} XP</span></div></div><div class="v2-reward-summary"><article><strong>${unlocked.length}</strong><span>Rewards earned</span></article><article><strong>${locked.length}</strong><span>Still locked</span></article><article><strong>🔥 ${daily.streak}</strong><span>Current streak</span></article><article><strong>${s.caught}</strong><span>Pokémon collected</span></article></div><div class="v2-reward-list">${cards}</div></div>`;
+  }
+  function renderV2Stats(){
+    const caught=v2CaughtCount(), total=v2MainCount(), pct=v2Pct(caught,total), xp=v2XpSnapshot(), daily=v2DailySnapshot();
+    const fav=Object.keys(favorites||{}).filter(k=>favorites[k]).length;
+    const teamCount=Array.isArray(team)?team.length:0;
+    const q=Number(trainingStats?.__timedQuestions||0), correct=Object.keys(trainingStats||{}).filter(k=>!k.startsWith('__')&&trainingStats[k]&&typeof trainingStats[k]==='object').reduce((n,k)=>n+Number(trainingStats[k].correct||0),0);
+    const sessions=Number(trainingStats?.__trainingSessions||0);
+    const forms=entries.filter(e=>!!state[e.id]&&e.form).length;
+    const rows=[['Current collection',caught.toLocaleString(),`${pct}% of main LivingDex`],['Favorites',fav,`${fav?'Curated':'Start building'} collection`],['Team',teamCount,'6 slots maximum'],['Forms collected',forms,'Tracked from your current collection'],['Training questions',q.toLocaleString(),`${sessions} sessions`],['Training correct',correct.toLocaleString(),q?`${Math.round(correct/q*100)}% accuracy`:'No answers yet'],['Daily streak',daily.streak,`Best ${daily.bestStreak}`],['Trainer XP',xp.xp.toLocaleString(),`Level ${xp.level}`]];
+    $('#view').innerHTML=`<div class="page-card v2-rich-page"><div class="page-title"><div><div class="eyebrow">TRAINER ANALYTICS</div><h2>Statistics</h2><p>A clean snapshot of your collection and Trainer journey.</p></div><div class="v2-level-pill">LV ${xp.level}<span>${xp.intoLevel}/100 XP</span></div></div><div class="v2-stats-grid">${rows.map(r=>`<article><span>${escHtml(r[0])}</span><strong>${escHtml(String(r[1]))}</strong><small>${escHtml(r[2])}</small></article>`).join('')}</div><div class="v2-progress-panel"><div><span class="eyebrow">LIVINGDEX COMPLETION</span><strong>${pct}%</strong></div><div class="v2-wide-progress"><i style="width:${pct}%"></i></div><div class="v2-stat-foot"><span>${caught.toLocaleString()} currently collected</span><span>${total.toLocaleString()} total</span></div></div></div>`;
+  }
+  function renderV2Goals(){
+    const caught=v2CaughtCount(), total=v2MainCount(), pct=v2Pct(caught,total), d=window.__dailyDexEntry?.();
+    const daily=v2DailySnapshot(), streak=daily.streak, q=Number(trainingStats?.__timedQuestions||0), xp=v2XpSnapshot();
+    const goals=[
+      ['Complete today’s Catch Calendar',d&&state[d.id]?1:0,1,d?.name||'Daily mission'],
+      ['Reach the next Trainer Level',xp.intoLevel,100,`${100-xp.intoLevel} XP remaining`],
+      ['Build your LivingDex',caught,total,`${pct}% complete`],
+      ['Build a 7-day streak',Math.min(streak,7),7,`${Math.max(0,7-streak)} days remaining`],
+      ['Answer 100 training questions',Math.min(q,100),100,`${Math.max(0,100-q)} questions remaining`]
+    ];
+    $('#view').innerHTML=`<div class="page-card v2-rich-page"><div class="page-title"><div><div class="eyebrow">TRAINER OBJECTIVES</div><h2>Goals</h2><p>Small goals keep your collection moving without turning the app into a grind.</p></div></div><div class="v2-goal-list">${goals.map(g=>{const p=v2Pct(g[1],g[2]);return `<article class="v2-goal"><div class="v2-goal-top"><div><b>${escHtml(g[0])}</b><small>${escHtml(String(g[3]))}</small></div><strong>${Math.min(g[1],g[2])}/${g[2]}</strong></div><div class="v2-wide-progress"><i style="width:${p}%"></i></div></article>`}).join('')}</div></div>`;
+  }
+  function renderV2Activity(){
+    const rows=v2ActivityRows(50);
+    const html=rows.length?rows.map(a=>{
+      const txt=v2ActivityText(a);
+      const when=a.ts?new Date(Number(a.ts)).toLocaleString([], {day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):(a.date||'');
+      return `<article class="v2-activity-row"><div class="v2-activity-icon">${a.type==='caught'?'✓':a.type==='evolved'?'↗':a.type==='traded'?'⇄':a.type==='training_complete'?'⚔':a.type?.startsWith('daily')?'★':'•'}</div><div><b>${escHtml(txt)}</b><small>${escHtml(when)}</small></div></article>`;
+    }).join(''):`<div class="v2-empty-feed">No activity yet. Your Trainer journey will appear here.</div>`;
+    $('#view').innerHTML=`<div class="page-card v2-rich-page"><div class="page-title"><div><div class="eyebrow">TRAINER JOURNAL</div><h2>Activity</h2><p>Your personal collection history in one place.</p></div></div><div class="v2-activity-list">${html}</div></div>`;
+  }
+  function v2CommandPalette(){
+    if($('#v2CommandPalette')){ $('#v2CommandPalette').hidden=false; $('#v2CommandInput')?.focus(); return; }
+    const el=document.createElement('div');el.id='v2CommandPalette';el.className='v2-command-overlay';el.innerHTML=`<div class="v2-command"><button class="v2-command-close" id="v2CommandClose">×</button><div class="eyebrow">TRAINER COMMAND</div><h3>What do you want to do?</h3><input id="v2CommandInput" placeholder="Search actions…" autocomplete="off"><div id="v2CommandList"></div><small>Press Esc to close · Ctrl/⌘ K to open</small></div>`;document.body.appendChild(el);
+    const actions=[['Open Home','home','⌂'],['Open LivingDex','dex','▦'],['Open Catch Calendar','daily','◷'],['Start Training','training','⚔'],['Open Rewards','achievements','★'],['Open Statistics','stats','◌'],['Open Goals','goals','◎'],['Open Activity','activity','≡'],['Open Team Builder','team','◇'],['Open Type Knowledge','types','◈'],['Open Players','players','◎'],['Open Leaderboard','leaderboard','♛']];
+    const draw=()=>{const q=norm($('#v2CommandInput').value);const list=actions.filter(a=>!q||norm(a[0]).includes(q));$('#v2CommandList').innerHTML=list.map(a=>`<button class="v2-command-item" data-cmd="${a[1]}"><span>${a[2]}</span>${a[0]}<kbd>↵</kbd></button>`).join('')||'<div class="v2-empty-feed">No matching action.</div>';$$('.v2-command-item').forEach(b=>b.onclick=()=>{el.hidden=true;v2Navigate(b.dataset.cmd);});};
+    $('#v2CommandInput').oninput=draw;$('#v2CommandClose').onclick=()=>el.hidden=true;el.onclick=e=>{if(e.target===el)el.hidden=true};el.addEventListener('keydown',e=>{if(e.key==='Escape')el.hidden=true});draw();$('#v2CommandInput').focus();
+  }
+  function v2QuickSearch(){v2CommandPalette();}
+
+  function v2GenerationStats(){
+    const gens=[];
+    for(let g=1;g<=9;g++){ const all=entries.filter(e=>Number(e.generation||0)===g); const caught=all.filter(e=>!!state[e.id]).length; gens.push({g,total:all.length,caught,pct:v2Pct(caught,all.length)}); }
+    return gens.filter(x=>x.total);
+  }
+  function v2Heatmap(){
+    const gens=v2GenerationStats();
+    return gens.map(x=>`<button class="v2-heat-cell heat-${x.pct<25?'low':x.pct<60?'mid':x.pct<90?'high':'done'}" title="Generation ${x.g}: ${x.caught}/${x.total}"><span>GEN ${x.g}</span><strong>${x.pct}%</strong><small>${x.caught}/${x.total}</small></button>`).join('');
+  }
+  function v2TypeOverview(){
+    const base=pageEntries('main');
+    return TYPES.map(type=>{
+      const all=base.filter(e=>entryTypes(e).includes(type));
+      const caught=all.filter(e=>!!state[e.id]).length;
+      const pct=v2Pct(caught,all.length);
+      return {type,total:all.length,caught,pct};
+    }).filter(x=>x.total).sort((a,b)=>b.pct-a.pct||b.caught-a.caught||a.type.localeCompare(b.type));
+  }
+  function v2TypeRings(){
+    return v2TypeOverview().map(x=>`<button class="v2-type-ring" type="button" title="${escHtml(typeLabel(x.type))}: ${x.caught}/${x.total}" data-type-ring="${escHtml(x.type)}" style="--type-pct:${x.pct}%;--type-color:${TYPE_COLORS[x.type]||'#7da5ff'}"><span class="v2-type-ring-visual"><b>${x.pct}%</b></span><strong>${escHtml(typeLabel(x.type))}</strong><small>${x.caught}/${x.total}</small></button>`).join('');
+  }
+  function v2GlobalActivityText(a){
+    const name=a?.name||a?.entryName||'';
+    const trainer=a?.trainerName||'Trainer';
+    const action=v2ActivityText(a);
+    return `${trainer} · ${action}`;
+  }
+  function v2GlobalActivityRows(){
+    try{return Array.isArray(window.__v2GlobalActivityCache)?window.__v2GlobalActivityCache:[];}catch{return [];}
+  }
+  async function v2LoadGlobalActivity(){
+    if(typeof window.getGlobalActivityV17!=='function') return;
+    try{
+      const rows=await window.getGlobalActivityV17();
+      window.__v2GlobalActivityCache=Array.isArray(rows)?rows:[];
+      if(view!=='home') return;
+      const el=$('#v2HomeFeed'); if(!el) return;
+      if(document.body.dataset.v2FeedMode==='global') v2RenderHomeFeed('global');
+    }catch(err){console.warn('Global activity unavailable',err);}
+  }
+  function v2RenderHomeFeed(mode='personal'){
+    const el=$('#v2HomeFeed'); if(!el)return;
+    document.body.dataset.v2FeedMode=mode;
+    const rows=mode==='global'?v2GlobalActivityRows():((typeof activityLog==='function'?activityLog():[]).filter(a=>a&&a.type).slice().sort((a,b)=>Number(b.ts||0)-Number(a.ts||0)).slice(0,12));
+    el.innerHTML=rows.length?rows.map(a=>`<div class="v2-feed-row"><span class="v2-feed-dot"></span><div><b>${escHtml(mode==='global'?v2GlobalActivityText(a):v2ActivityText(a))}</b><small>${escHtml(a.ts?new Date(Number(a.ts)).toLocaleString([], {day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):(a.date||''))}</small></div></div>`).join(''):`<div class="v2-empty-feed">${mode==='global'?'No public player activity yet.':'Your Trainer activity will appear here as you play.'}</div>`;
+    $$('#v2FeedPersonal,#v2FeedGlobal').forEach(b=>b.classList.toggle('active',(b.id==='v2FeedPersonal'&&mode==='personal')||(b.id==='v2FeedGlobal'&&mode==='global')));
+  }
+  function renderV2Home(){
+    $('#dexView').hidden=true; $('#view').hidden=false;
+    const caught=v2CaughtCount(), total=v2MainCount(), pct=v2Pct(caught,total);
+    const d=window.__dailyDexEntry?.()||null;
+    const dailyDone=!!(d && state[d.id]);
+    const profile=v2Profile();
+    const meta=profileMeta();
+    // Home, Statistics and Rewards must use one Trainer progression source.
+    const xpSnapshot=v2XpSnapshot();
+    const level=xpSnapshot.level, xp=xpSnapshot.xp, xpPct=xpSnapshot.pct;
+    const daily=v2DailySnapshot();
+    const streak=daily.streak;
+    const dailyOwned=!!(d && state[d.id]);
+    const dailyDuplicateDone=!!(d && localStorage.getItem('cobblemon-v2-daily-duplicate-'+new Date().toISOString().slice(0,10))==='1');
+    const recent=(typeof activityLog==='function'?activityLog():[]).filter(a=>a&&a.type).slice(-6).reverse();
+    const activity=recent.length?recent.map(a=>`<div class="v2-feed-row"><span class="v2-feed-dot"></span><div><b>${escHtml(v2ActivityText(a))}</b><small>${escHtml(a.ts?new Date(Number(a.ts)).toLocaleString([], {day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):(a.date||''))}</small></div></div>`).join(''):`<div class="v2-empty-feed">Your Trainer activity will appear here as you play.</div>`;
+    $('#view').innerHTML=`<div class="v2-home-page">
+      <section class="v2-hero">
+        <div class="v2-hero-copy"><span class="eyebrow">TRAINER OS • ${escHtml(meta.ign||'COBBLEMON TRAINER')}</span><h2>Welcome back, ${escHtml(profile.name||v2Name())}.</h2><p>Your collection, training and daily journey — all in one place.</p><div class="v2-hero-actions"><button class="primary" id="v2OpenDex">Open LivingDex</button></div></div>
+        <div class="v2-hero-orb"><div class="v2-orb-ring"></div><div class="v2-orb-mark">◈</div><span>TRAINER<br>ONLINE</span></div>
+      </section>
+      <section class="v2-stat-strip">
+        <article><span>LivingDex</span><strong>${caught.toLocaleString()} <small>/ ${total.toLocaleString()}</small></strong><i><b style="width:${pct}%"></b></i></article>
+        <article><span>Trainer Level</span><strong>Lv ${level}</strong><i><b style="width:${xpPct}%"></b></i></article>
+        <article><span>Daily Streak</span><strong>🔥 ${streak}</strong><small>Best ${daily.bestStreak}</small></article>
+        <article><span>Today's Pokémon</span><strong>${escHtml(d?.name||'—')}</strong><small>${dailyDone?'✓ Completed today':'Ready to catch'}</small></article>
+      </section>
+      <section class="v2-home-dashboard">
+        <div class="v2-home-left">
+          <article class="v2-home-card v2-overview-card">
+            <div class="v2-card-head"><div><span class="eyebrow">COLLECTION INTELLIGENCE</span><h3>LivingDex overview</h3></div><button class="v2-text-btn" id="v2HeatmapDex">Open LivingDex</button></div>
+            <div class="v2-overview-top"><div class="v2-main-ring" style="--pct:${pct}%"><strong>${pct}%</strong><small>COMPLETE</small></div><div class="v2-overview-copy"><b>${caught.toLocaleString()} / ${total.toLocaleString()} Pokémon</b><p>Your collection at a glance. Generations and type coverage update automatically as you catch.</p><div class="v2-overview-meta"><span>🔥 ${streak} day streak</span><span>Lv ${level}</span><span>${daily.bestStreak} best streak</span></div></div></div>
+            <div class="v2-section-label"><span>GENERATION MAP</span><small>Completion by generation</small></div><div class="v2-heatmap">${v2Heatmap()}</div>
+          </article>
+          <article class="v2-home-card v2-type-card"><div class="v2-card-head"><div><span class="eyebrow">TYPE MAP</span><h3>Collection by type</h3></div><span class="v2-card-kicker">${v2TypeOverview().length} TYPES</span></div><div class="v2-type-ring-grid">${v2TypeRings()}</div></article>
+          <div class="v2-home-lower">
+            <article class="v2-home-card v2-daily-card"><div class="v2-card-head"><div><span class="eyebrow">TODAY'S MISSION</span><h3>Catch Calendar</h3></div><span class="v2-card-kicker">+ Daily XP</span></div><div class="v2-daily-body">${d?`<img src="${spritePath(d)}" alt="${escHtml(d.name)}"><div><b>${escHtml(d.name)}</b><p>${dailyDone?(dailyDuplicateDone?'Duplicate catch logged. Keep the streak alive.':'Mission complete. Keep the streak alive.'):(dailyOwned?'You already own it. Log a duplicate catch to complete today.':'Catch this Pokémon to complete today’s mission.')}</p><button class="secondary" id="v2DailyView">View Pokémon</button></div>`:`<div class="v2-empty-feed">No daily Pokémon available.</div>`}</div></article>
+            <article class="v2-home-card"><div class="v2-card-head"><div><span class="eyebrow">COLLECTION</span><h3>Your journey</h3></div><span class="v2-big-percent">${pct}%</span></div><div class="v2-journey"><div class="v2-ring" style="--pct:${pct}%"><strong>${pct}%</strong></div><div><b>${caught.toLocaleString()} Pokémon collected</b><p>Keep building your LivingDex and unlock Trainer rewards.</p><button class="secondary" id="v2ProgressBtn">Open Progress</button></div></div></article>
+          </div>
+        </div>
+        <aside class="v2-home-activity"><article class="v2-home-card v2-feed-card"><div class="v2-card-head"><div><span class="eyebrow">TRAINER TIMELINE</span><h3>Recent activity</h3></div><button class="v2-text-btn" id="v2ActivityBtn">View all</button></div><div class="v2-feed-tabs" role="tablist"><button class="v2-feed-tab active" id="v2FeedPersonal" type="button">Personal</button><button class="v2-feed-tab" id="v2FeedGlobal" type="button">Global</button></div><div class="v2-feed" id="v2HomeFeed">${activity}</div></article></aside>
+      </section>
+      <section class="v2-quick-actions"><button class="v2-quick" id="v2QuickSearch">⌕<span>Command Search</span><small>Ctrl K</small></button><button class="v2-quick" id="v2QuickStats">◌<span>Statistics</span></button><button class="v2-quick" id="v2QuickGoals">◎<span>Goals</span></button><button class="v2-quick" id="v2QuickActivity">≡<span>Activity</span></button></section>
+    </div>`;
+    $('#v2OpenDex')?.addEventListener('click',()=>v2Navigate('dex'));
+    $('#v2DailyView')?.addEventListener('click',()=>d&&openInfo(d.id));
+    $('#v2ProgressBtn')?.addEventListener('click',()=>v2Navigate('achievements'));
+    $('#v2ActivityBtn')?.addEventListener('click',()=>v2Navigate('activity'));
+    $('#v2FeedPersonal')?.addEventListener('click',()=>v2RenderHomeFeed('personal'));
+    $('#v2FeedGlobal')?.addEventListener('click',()=>{v2RenderHomeFeed('global');v2LoadGlobalActivity();});
+    document.body.dataset.v2FeedMode='personal';
+    v2LoadGlobalActivity();
+    $('#v2HeatmapDex')?.addEventListener('click',()=>v2Navigate('dex'));
+    $$('[data-type-ring]').forEach(b=>b.addEventListener('click',()=>{selectedTypes=[b.dataset.typeRing];tab='main';page=1;query='';status='all';v2Navigate('dex');}));
+    $('#v2QuickSearch')?.addEventListener('click',v2QuickSearch);
+    $('#v2QuickStats')?.addEventListener('click',()=>v2Navigate('stats'));
+    $('#v2QuickGoals')?.addEventListener('click',()=>v2Navigate('goals'));
+    $('#v2QuickActivity')?.addEventListener('click',()=>v2Navigate('activity'));
+  }
+  window.renderV2Home=renderV2Home;
+  window.v2Navigate=v2Navigate;
+
   window.renderTopNav = function(){
-    const items=[['dex','LivingDex'],['daily','Catch Calendar'],['team','Team Builder'],['types','Type Knowledge'],['training','Training'],['achievements','Progress']];
+    const items=[['dex','LivingDex'],['daily','Catch Calendar'],['team','Team Builder'],['types','Type Knowledge'],['training','Training'],['achievements','Rewards'],['stats','Statistics'],['goals','Goals'],['activity','Activity']];
     $('#topNav').innerHTML=items.map(([k,n])=>`<button class="top-nav-btn ${view===k?'active':''}" data-view="${k}">${n}</button>`).join('');
-    $$('.top-nav-btn').forEach(b=>b.onclick=()=>{closeInfo();view=b.dataset.view;renderTopNav();renderView();});
+    $$('.top-nav-btn').forEach(b=>b.onclick=()=>v2Navigate(b.dataset.view));
+    v2IconNav(view);
   };
   window.renderView = function(){
+    if(view==='home'){renderV2Home();return;}
     if(view==='dex'){renderDex();return;}
     $('#dexView').hidden=true;$('#view').hidden=false;
     if(view==='team')renderTeam();
     else if(view==='types')renderTypeKnowledge();
     else if(view==='training')renderTraining();
     else if(view==='daily')renderDailyDex();
-    else if(view==='achievements')renderProgressPlus();
+    else if(view==='achievements')renderV2Rewards();
+    else if(view==='stats')renderV2Stats();
+    else if(view==='goals')renderV2Goals();
+    else if(view==='activity')renderV2Activity();
+    else if(view==='players')window.renderPlayers?.();
+    else if(view==='leaderboard')window.renderLeaderboard?.();
   };
 
   function addBackupControls(){
@@ -619,7 +919,7 @@
 
   // Boot V1.1 after the V1.0 app has loaded its data and local state.
   function boot(){
-    document.title='Cobblemon LivingDex — V1.7.1';
+    document.title='Cobblemon LivingDex — V2.0.12';
     // Expose the V1.1/V1.2 views explicitly so the database layer and navigation
     // always call the same implementations.
     window.renderTraining = renderTraining;
@@ -648,24 +948,16 @@
     // The V1.0 app initializes before this file loads, so explicitly render the
     // default view here as well; this prevents a blank first screen until the
     // LivingDex button is clicked.
-    view='dex';
+    view='home';
     renderTopNav();
     renderView();
+    const v2n=document.querySelector('#v2TrainerName'); if(v2n)v2n.textContent=v2Name();
+    const v2m=document.querySelector('#v2TrainerMeta'); if(v2m)v2m.textContent=profileMeta().ign ? 'IGN · '+profileMeta().ign : 'Trainer OS';
     // Re-bind navigation with delegation. This prevents an older V1.0 handler
     // from swallowing the new Training/Progress views.
-    document.addEventListener('click', e=>{
-      if(window.__LIVINGDEX_DB_NAV_ACTIVE)return;
-      const b=e.target.closest?.('.top-nav-btn');
-      if(!b)return;
-      const target=b.dataset.view;
-      if(!['dex','team','types','training','daily','achievements'].includes(target))return;
-      e.preventDefault();
-      closeInfo();
-      view=target;
-      window.renderTopNav();
-      window.renderView();
-    });
-    document.addEventListener('keydown',e=>{if(e.key==='Escape' && typeof closeFilterModal==='function')closeFilterModal();});
+    const homeBtn=document.getElementById('v2HomeReset');
+    if(homeBtn)homeBtn.onclick=e=>{e.preventDefault();e.stopImmediatePropagation();v2Navigate('home');};
+    document.addEventListener('keydown',e=>{if(e.key==='Escape' && typeof closeFilterModal==='function')closeFilterModal();if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();v2CommandPalette();}});
   }
   boot();
 })();
