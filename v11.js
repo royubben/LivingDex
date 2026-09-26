@@ -1,6 +1,6 @@
 /* Cobblemon LivingDex V1.1 - LivingDex Plus */
 (() => {
-  const V11_VERSION = '1.7.6';
+  const V11_VERSION = '1.7.7';
   const adv = { generation:'all', type:'all', status:'all', special:'all' };
   let trainingSession = null;
   let trainingStats = JSON.parse(localStorage.getItem('cobblemon-livingdex-training') || '{}');
@@ -29,6 +29,19 @@
   const mainEntries = () => pageEntries('main');
   const caughtCount = () => mainEntries().filter(e => state[e.id]).length;
   const pokemonCounts = () => { try { return window.pokemonCounts ||= JSON.parse(localStorage.getItem('cobblemon-livingdex-counts') || '{}'); } catch { return (window.pokemonCounts ||= {}); } };
+  const shinyCounts = () => { trainingStats.__shinies ||= {}; return trainingStats.__shinies; };
+  const shinyCount = id => Math.max(0, Math.floor(Number(shinyCounts()[id] || 0)));
+  const setShinyCount = (id, count) => { const n=Math.max(0, Math.floor(Number(count)||0)); const c=shinyCounts(); if(n>0)c[id]=n; else delete c[id]; saveTraining(); };
+  const shinySpritePath = e => {
+    const dex=Math.max(1,Number(e?.dex||0));
+    const base=`https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/shiny/${dex}.png`;
+    const form=String(e?.form||'').toLowerCase();
+    if(/alola|alolan/.test(form)) return `https://play.pokemonshowdown.com/sprites/gen5-shiny/${String(e.name||'').toLowerCase()}-alola.png`;
+    if(/galar|galarian/.test(form)) return `https://play.pokemonshowdown.com/sprites/gen5-shiny/${String(e.name||'').toLowerCase()}-galar.png`;
+    if(/hisui|hisuian/.test(form)) return `https://play.pokemonshowdown.com/sprites/gen5-shiny/${String(e.name||'').toLowerCase()}-hisui.png`;
+    if(/paldea|paldean/.test(form)) return `https://play.pokemonshowdown.com/sprites/gen5-shiny/${String(e.name||'').toLowerCase()}-paldea.png`;
+    return base;
+  };
   const pokemonCount = id => Math.max(0, Number(pokemonCounts()[id] || (state[id] ? 1 : 0)));
   const setPokemonCount = (id, count) => { const n=Math.max(0, Math.floor(Number(count)||0)); const c=pokemonCounts(); if(n>0)c[id]=n; else delete c[id]; localStorage.setItem('cobblemon-livingdex-counts',JSON.stringify(c)); window.LivingDexOnline?.queueSave?.(); };
   const addPokemonCopy = id => setPokemonCount(id,pokemonCount(id)+1);
@@ -157,7 +170,7 @@
     $('#infoContent').innerHTML=`<div class="detail-hero">
       <div class="detail-art"><img loading="eager" decoding="async" src="${spritePath(e)}" alt="${escHtml(e.name)}"></div>
       <div class="detail-main"><div class="eyebrow">POKÉDEX #${String(e.dex).padStart(3,'0')}</div><h2>${escHtml(e.name)}</h2>${e.form?`<p class="detail-form">${escHtml(e.form)}</p>`:''}<div class="types detail-types">${types.map(t=>`<span class="type" style="${typeStyle(t)}">${escHtml(typeLabel(t))}</span>`).join('')}</div><div class="detail-rarity-pill ${rarityClass}">✦ ${escHtml(rarity)}</div><div class="detail-status"><span class="detail-status-pill ${caught?'is-caught':''}">${caught?`✓ Currently owned · ×${copyCount}`:'○ Not currently owned'}</span><span class="detail-status-pill ${fav?'is-favorite':''}">${fav?'★ Favorite':'☆ Not favorite'}</span></div><div class="detail-actions"><button id="detailCaught" class="${caught?'primary':'secondary'}">${caught?`✓ Collected ×${copyCount}`:'Mark caught'}</button><button id="detailAddCopy" class="secondary">＋ Add another</button><button id="detailFav" class="secondary">${fav?'★ Favorite':'☆ Favorite'}</button><button id="detailTeam" class="secondary">${team.includes(e.id)?'✓ In Team':'＋ Add to Team'}</button></div></div>
-    </div>${navHtml}
+    </div><section class="shiny-detail-card ${shinyCount(e.id)>0?'is-owned':''}"><div class="shiny-detail-art"><img loading="lazy" decoding="async" src="${shinySpritePath(e)}" alt="${escHtml(e.name)} shiny" onerror="this.closest('.shiny-detail-art')?.classList.add('is-unavailable');this.remove();"></div><div class="shiny-detail-copy"><div class="eyebrow">✨ SHINY COLLECTION</div><h3>${shinyCount(e.id)>0?'Shiny collected':'Shiny not collected'}</h3><p>${shinyCount(e.id)>0?`You have ${shinyCount(e.id)} shiny ${escHtml(e.name)}${shinyCount(e.id)===1?'':'s'}.`:`Track the shiny separately from your normal LivingDex entry.`}</p><div class="shiny-detail-actions"><button id="detailShinyToggle" class="${shinyCount(e.id)>0?'primary':'secondary'}">${shinyCount(e.id)>0?'✓ Shiny ×'+shinyCount(e.id):'✨ Mark shiny'}</button>${shinyCount(e.id)>0?`<button id="detailShinyAdd" class="secondary">＋ Add another</button><button id="detailShinyRemove" class="secondary">− Remove one</button>`:''}</div></div></section>${navHtml}
     <div class="info-section"><div class="section-heading detail-section-heading"><div><span class="eyebrow">OVERVIEW</span><h3>Pokédex information</h3></div></div><div class="info-grid"><div class="info-item"><b>Generation</b><span>${gen?`Generation ${generationName(gen)}`:'Special / Cobblemon'}</span></div><div class="info-item"><b>Collection</b><span>${escHtml(collectionLabel)}</span></div><div class="info-item"><b>Location</b><span>${escHtml(location)}</span></div><div class="info-item"><b>Height</b><span>${sp.height!=null?(Number(sp.height)/10).toFixed(1)+' m':'—'}</span></div><div class="info-item"><b>Weight</b><span>${sp.weight!=null?(Number(sp.weight)/10).toFixed(1)+' kg':'—'}</span></div><div class="info-item"><b>Abilities</b><span>${escHtml((sp.abilities||[]).join(', ')||'—')}</span></div><div class="info-item"><b>Base experience</b><span>${sp.baseExperienceYield??'—'}</span></div><div class="info-item"><b>Catch rate</b><span>${sp.catchRate??'—'}</span></div><div class="info-item"><b>Personal history</b><span>${historyCount?`${historyCount} recorded event${historyCount===1?'':'s'}`:'No events yet'}</span></div></div></div>${formsHtml}
     <div class="info-section"><div class="section-heading detail-section-heading"><div><span class="eyebrow">EVOLUTION</span><h3>Evolution line</h3></div><span class="section-note">Lazy loaded</span></div><div id="detailEvolutionPanel"><div class="detail-lazy-placeholder">Evolution data loads after the Pokémon view is painted.</div></div></div>
     <div class="info-tabs"><button class="info-tab active" data-panel="stats">Base stats</button><button class="info-tab" data-panel="spawn">Spawn</button><button class="info-tab" data-panel="breeding">Breeding</button><button class="info-tab" data-panel="moves">Moves</button><button class="info-tab" data-panel="history">History</button><button class="info-tab" data-panel="notes">Notes</button></div>
@@ -180,6 +193,9 @@
     $$('#infoContent [data-detail-form]').forEach(b=>b.onclick=()=>openInfo(b.dataset.detailForm));
     $('#infoContent')?.addEventListener('click',e=>{const b=e.target.closest('[data-move-detail]');if(!b)return;e.preventDefault();e.stopPropagation();openMoveInfo(b.dataset.moveDetail);});
     $$('#infoContent [data-evo-entry]').forEach(b=>b.onclick=()=>openInfo(b.dataset.evoEntry));
+    $('#detailShinyToggle')?.addEventListener('click',()=>{const n=shinyCount(e.id);setShinyCount(e.id,n?0:1);openInfo(e.id);});
+    $('#detailShinyAdd')?.addEventListener('click',()=>{setShinyCount(e.id,shinyCount(e.id)+1);openInfo(e.id);});
+    $('#detailShinyRemove')?.addEventListener('click',()=>{setShinyCount(e.id,shinyCount(e.id)-1);openInfo(e.id);});
     $('#detailCaught')?.addEventListener('click',()=>{const n=pokemonCount(e.id);if(n>0){if(n>1)setPokemonCount(e.id,n-1);else{setPokemonCount(e.id,0);delete state[e.id];recordActivity('uncaught',{entryId:e.id,name:e.name});}}else{setPokemonCount(e.id,1);state[e.id]=true;recordActivity('caught',{entryId:e.id,name:e.name});}saveAll();touchDailyCompletion();openInfo(e.id);render();});
     $('#detailAddCopy')?.addEventListener('click',()=>{addPokemonCopy(e.id);state[e.id]=true;recordActivity('caught',{entryId:e.id,name:e.name,duplicate:true});saveAll();openInfo(e.id);});
     $('#detailFav')?.addEventListener('click',()=>{const active=!favorites[e.id];favorites[e.id]=active;if(!active)delete favorites[e.id];recordActivity(active?'favorite':'unfavorite',{entryId:e.id,name:e.name});saveAll();openInfo(e.id);});
@@ -1261,6 +1277,8 @@
     window.renderProfileBannerChoicesV17=(selected='aurora')=>{selectedProfileBanner=PROFILE_BANNERS[selected]?selected:'aurora';const el=document.querySelector('#profileBannerChoices');if(!el)return;el.innerHTML=Object.entries(PROFILE_BANNERS).map(([id,name])=>`<button type="button" class="profile-banner-choice banner-${id} ${selectedProfileBanner===id?'selected':''}" data-banner-choice="${id}"><span></span><b>${name}</b></button>`).join('');el.querySelectorAll('[data-banner-choice]').forEach(b=>b.onclick=()=>{selectedProfileBanner=b.dataset.bannerChoice;el.querySelectorAll('[data-banner-choice]').forEach(x=>x.classList.toggle('selected',x===b));});};
     window.getActivityLogV17=()=>activityLog().slice();
     window.refreshTrainingStateV17=()=>{try{trainingStats=JSON.parse(localStorage.getItem('cobblemon-livingdex-training')||'{}');}catch{trainingStats={};}};
+    window.getShinyCountV17=id=>shinyCount(id);
+    window.getShinyCountsV17=()=>({...shinyCounts()});
     window.renderTopNav = renderTopNav;
     window.renderView = renderView;
     addBackupControls();
