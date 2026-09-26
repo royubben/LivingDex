@@ -1,6 +1,6 @@
 /* Cobblemon LivingDex V1.1 - LivingDex Plus */
 (() => {
-  const V11_VERSION = '1.7.8';
+  const V11_VERSION = '1.7.9';
   const adv = { generation:'all', type:'all', status:'all', special:'all' };
   let trainingSession = null;
   let trainingStats = JSON.parse(localStorage.getItem('cobblemon-livingdex-training') || '{}');
@@ -1283,6 +1283,7 @@
     window.renderProfileBannerChoicesV17=(selected='aurora')=>{selectedProfileBanner=PROFILE_BANNERS[selected]?selected:'aurora';const el=document.querySelector('#profileBannerChoices');if(!el)return;el.innerHTML=Object.entries(PROFILE_BANNERS).map(([id,name])=>`<button type="button" class="profile-banner-choice banner-${id} ${selectedProfileBanner===id?'selected':''}" data-banner-choice="${id}"><span></span><b>${name}</b></button>`).join('');el.querySelectorAll('[data-banner-choice]').forEach(b=>b.onclick=()=>{selectedProfileBanner=b.dataset.bannerChoice;el.querySelectorAll('[data-banner-choice]').forEach(x=>x.classList.toggle('selected',x===b));});};
     window.getActivityLogV17=()=>activityLog().slice();
     window.refreshTrainingStateV17=()=>{try{trainingStats=JSON.parse(localStorage.getItem('cobblemon-livingdex-training')||'{}');}catch{trainingStats={};}};
+    window.getPokemonCountV17=id=>pokemonCount(id);
     window.getShinyCountV17=id=>shinyCount(id);
     window.getShinyCountsV17=()=>({...shinyCounts()});
     window.setShinyCountV17=(id,count)=>setShinyCount(id,count);
