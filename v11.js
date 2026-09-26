@@ -697,6 +697,7 @@
     ['home','⌂','Home'],
     ['activity','≡','Feed'],
     ['dex','▦','LivingDex'],
+    ['pokesnack','❖','PokéSnack Maker'],
     ['daily','◷','Catch Calendar'],
     ['training','⚔','Training'],
     ['team','◇','Team Builder'],
@@ -716,7 +717,7 @@
   function v2MainCount(){return pageEntries('main').length||entries.length;}
   function v2Pct(a,b){return b?Math.round(a/b*100):0;}
   function v2IconNav(active){
-    const primary=V2_NAV.filter(x=>['home','activity','dex','daily','training','team','types'].includes(x[0]));
+    const primary=V2_NAV.filter(x=>['home','activity','dex','pokesnack','daily','training','team','types'].includes(x[0]));
     const journey=V2_NAV.filter(x=>['achievements','stats','goals'].includes(x[0]));
     const social=V2_NAV.filter(x=>['profile','players','leaderboard'].includes(x[0]));
     const button=([id,icon,label])=>`<button class="v2-nav-item ${active===id?'active':''}" data-v2-view="${id}"><span class="v2-nav-icon">${icon}</span><span>${label}</span></button>`;
@@ -1225,8 +1226,84 @@
   window.v2CurrentView=()=>view;
   window.v2IconNav=v2IconNav;window.v2CurrentView=()=>view;
 
+
+  // ================================================================
+  // V2.0.39 — PokéSnack Maker simplified
+  // Pokémon -> Target / Shiny -> exactly 2 recommended berry combinations.
+  // ================================================================
+  const SNACK_SEASONINGS = [
+    {id:'chilan',name:'Chilan Berry',kind:'type',value:'normal'}, {id:'tanga',name:'Tanga Berry',kind:'type',value:'bug'},
+    {id:'colbur',name:'Colbur Berry',kind:'type',value:'dark'}, {id:'haban',name:'Haban Berry',kind:'type',value:'dragon'},
+    {id:'wacan',name:'Wacan Berry',kind:'type',value:'electric'}, {id:'roseli',name:'Roseli Berry',kind:'type',value:'fairy'},
+    {id:'chople',name:'Chople Berry',kind:'type',value:'fighting'}, {id:'occa',name:'Occa Berry',kind:'type',value:'fire'},
+    {id:'coba',name:'Coba Berry',kind:'type',value:'flying'}, {id:'kasib',name:'Kasib Berry',kind:'type',value:'ghost'},
+    {id:'rindo',name:'Rindo Berry',kind:'type',value:'grass'}, {id:'shuca',name:'Shuca Berry',kind:'type',value:'ground'},
+    {id:'yache',name:'Yache Berry',kind:'type',value:'ice'}, {id:'kebia',name:'Kebia Berry',kind:'type',value:'poison'},
+    {id:'payapa',name:'Payapa Berry',kind:'type',value:'psychic'}, {id:'charti',name:'Charti Berry',kind:'type',value:'rock'},
+    {id:'babiri',name:'Babiri Berry',kind:'type',value:'steel'}, {id:'passho',name:'Passho Berry',kind:'type',value:'water'},
+    {id:'rawst',name:'Rawst Berry',kind:'egg',value:'field'}, {id:'pecha',name:'Pecha Berry',kind:'egg',value:'water 3|bug'},
+    {id:'cheri',name:'Cheri Berry',kind:'egg',value:'grass|fairy'}, {id:'chesto',name:'Chesto Berry',kind:'egg',value:'human-like|flying'},
+    {id:'aspear',name:'Aspear Berry',kind:'egg',value:'water 1|water 2'}, {id:'persim',name:'Persim Berry',kind:'egg',value:'mineral|amorphous'},
+    {id:'lum',name:'Lum Berry',kind:'egg',value:'dragon|monster'}, {id:'starf',name:'Starf Berry',kind:'shiny',value:4}
+  ];
+  const snackSpecies=e=>speciesForEntry(e)||{};
+  const snackTypesFor=e=>{const s=snackSpecies(e);return [...new Set([s.primaryType,s.secondaryType,...(Array.isArray(s.types)?s.types:[])].filter(Boolean).map(x=>String(x).toLowerCase()))]};
+  const snackEggsFor=e=>(snackSpecies(e).eggGroups||[]).map(x=>String(x).toLowerCase().replace(/_/g,'-'));
+  const snackMatch=(e,x)=>x.kind==='type'?snackTypesFor(e).includes(x.value):x.kind==='egg'?x.value.split('|').some(v=>snackEggsFor(e).includes(v)):x.kind==='shiny';
+  const snackBerryIcon=id=>`https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/${id}-berry.png`;
+  const snackBerryEffect=x=>{
+    const effects={
+      chilan:'10× Normal-type lure chance',tanga:'10× Bug-type lure chance',colbur:'10× Dark-type lure chance',haban:'10× Dragon-type lure chance',
+      wacan:'10× Electric-type lure chance',roseli:'10× Fairy-type lure chance',chople:'10× Fighting-type lure chance',occa:'10× Fire-type lure chance',
+      coba:'10× Flying-type lure chance',kasib:'10× Ghost-type lure chance',rindo:'10× Grass-type lure chance',shuca:'10× Ground-type lure chance',
+      yache:'10× Ice-type lure chance',kebia:'10× Poison-type lure chance',payapa:'10× Psychic-type lure chance',charti:'10× Rock-type lure chance',
+      babiri:'10× Steel-type lure chance',passho:'10× Water-type lure chance',rawst:'10× Field Egg Group lure chance',pecha:'10× Water 3 / Bug Egg Group lure chance',
+      cheri:'10× Grass / Fairy Egg Group lure chance',chesto:'10× Human-Like / Flying Egg Group lure chance',aspear:'10× Water 1 / Water 2 Egg Group lure chance',
+      persim:'10× Mineral / Amorphous Egg Group lure chance',lum:'10× Dragon / Monster Egg Group lure chance',starf:'5× shiny chance'
+    };
+    return effects[x.id]||'Bait seasoning effect applies to the Pokémon this snack targets.';
+  };
+  const snackBerryImage=x=>`<img class="snack-berry-icon" loading="lazy" decoding="async" src="${snackBerryIcon(x.id)}" alt="${escHtml(x.name)}" onerror="this.style.display='none'">`;
+  const snackNorm=v=>String(v||'').toLowerCase().replace(/[^a-z0-9]+/g,'-');
+  const snackTargetEntries=()=>entries.filter(e=>{const s=snackSpecies(e);return !!s&&s.name&&Number(e.dex)>0;});
+  let snackTargetId=''; let snackQuery=''; let snackGoal='target';
+  const snackEntry=()=>entryById(snackTargetId)||null;
+  function snackRecipes(target,goal){
+    if(!target)return [];
+    const type=SNACK_SEASONINGS.filter(x=>x.kind==='type'&&snackMatch(target,x));
+    const egg=SNACK_SEASONINGS.filter(x=>x.kind==='egg'&&snackMatch(target,x));
+    const matches=[...type,...egg];
+    const unique=[...new Map(matches.map(x=>[x.id,x])).values()];
+    if(goal==='shiny'){
+      const shiny=SNACK_SEASONINGS.find(x=>x.id==='starf');
+      const a=unique[0]||SNACK_SEASONINGS.find(x=>x.id==='chilan');
+      const b=unique[1]||unique[0]||SNACK_SEASONINGS.find(x=>x.id==='chilan');
+      return [
+        [shiny,a,a],
+        [shiny,b,b]
+      ].map((combo,i)=>({combo,title:`Shiny recipe ${i+1}`,desc:`Starf Berry boosts shiny rerolls while ${a===combo[1]?a.name:b.name} keeps the snack focused on ${target.name}.`}));
+    }
+    const first=unique[0]||SNACK_SEASONINGS.find(x=>x.id==='chilan');
+    const second=unique[1]||unique[0]||SNACK_SEASONINGS.find(x=>x.id==='passho');
+    const third=unique[2]||first;
+    const combos=[ [first,first,second], [first,second,third] ];
+    return combos.map((combo,i)=>({combo,title:`Target recipe ${i+1}`,desc:`Uses the berry effects that match ${target.name}'s ${snackTypesFor(target).join(' / ')||'target data'}.`}));
+  }
+  const snackRecipeCard=r=>`<article class="snack-recipe-card"><div class="snack-recipe-number">${r.title}</div><div class="snack-recipe-berries">${r.combo.map(x=>`<div class="snack-berry"><div>${snackBerryImage(x)}</div><b>${escHtml(x.name.replace(' Berry',''))}</b><small>${escHtml(snackBerryEffect(x))}</small></div>`).join('')}</div><p>${escHtml(r.desc)}</p></article>`;
+  function renderPokeSnackMaker(){
+    const targets=snackTargetEntries(); const target=snackEntry();
+    const q=snackNorm(snackQuery); const shown=q?targets.filter(e=>snackNorm(e.name).includes(q)||String(e.dex).includes(q)).slice(0,18):[];
+    const recipes=snackRecipes(target,snackGoal);
+    $('#view').innerHTML=`<div class="page-card snack-maker-page"><section class="snack-hero"><div><span class="eyebrow">COBBLEMON • POKÉSNACK</span><h2>PokéSnack Maker</h2><p>Choose a Pokémon and get two simple berry combinations for your goal.</p></div><div class="snack-hero-berry">🍓</div></section><section class="snack-select-section"><div class="snack-search-wrap"><span>⌕</span><input id="snackTargetSearch" value="${escHtml(snackQuery)}" placeholder="Search Pokémon…" autocomplete="off"></div>${shown.length?`<div class="snack-search-results">${shown.map(e=>`<button type="button" data-snack-target="${escHtml(e.id)}"><img src="${escHtml(spritePath(e))}" alt=""><span><b>${escHtml(e.name)}</b><small>#${String(e.dex).padStart(3,'0')}</small></span></button>`).join('')}</div>`:''}${target?`<div class="snack-selected-pokemon"><img src="${escHtml(spritePath(target))}" alt="${escHtml(target.name)}"><div><span class="eyebrow">SELECTED POKÉMON</span><h3>${escHtml(target.name)}</h3><span>#${String(target.dex).padStart(3,'0')}</span></div><button type="button" class="secondary" id="snackChangePokemon">Change</button></div>`:`<div class="snack-empty-target">Search and choose a Pokémon to get started.</div>`}</section><section class="snack-goal-section"><div class="snack-goal-tabs"><button class="${snackGoal==='target'?'active':''}" data-snack-goal="target">🎯 Target</button><button class="${snackGoal==='shiny'?'active':''}" data-snack-goal="shiny">✨ Shiny</button></div>${target?`<div class="snack-goal-heading"><div><span class="eyebrow">${snackGoal==='shiny'?'SHINY RECIPES':'TARGET RECIPES'}</span><h3>${snackGoal==='shiny'?`Shiny ${escHtml(target.name)}`:`Attract ${escHtml(target.name)}`}</h3></div><span>2 combinations</span></div><div class="snack-recipe-grid">${recipes.map(snackRecipeCard).join('')}</div>`:`<div class="empty-panel">Choose a Pokémon first.</div>`}</section></div>`;
+    const search=$('#snackTargetSearch'); search.oninput=e=>{snackQuery=e.target.value;renderPokeSnackMaker();const n=$('#snackTargetSearch');n?.focus();n?.setSelectionRange(n.value.length,n.value.length);};
+    $$('[data-snack-target]').forEach(b=>b.onclick=()=>{snackTargetId=b.dataset.snackTarget;snackQuery='';renderPokeSnackMaker();});
+    $$('[data-snack-goal]').forEach(b=>b.onclick=()=>{snackGoal=b.dataset.snackGoal;renderPokeSnackMaker();});
+    $('#snackChangePokemon')?.addEventListener('click',()=>{snackTargetId='';snackQuery='';renderPokeSnackMaker();setTimeout(()=>$('#snackTargetSearch')?.focus(),0);});
+  }
+  window.renderPokeSnackMaker=renderPokeSnackMaker;
+
   window.renderTopNav = function(){
-    const items=[['dex','LivingDex'],['daily','Catch Calendar'],['team','Team Builder'],['types','Type Knowledge'],['training','Training'],['achievements','Rewards'],['stats','Statistics'],['goals','Goals'],['activity','Activity']];
+    const items=[['dex','LivingDex'],['pokesnack','PokéSnack Maker'],['daily','Catch Calendar'],['team','Team Builder'],['types','Type Knowledge'],['training','Training'],['achievements','Rewards'],['stats','Statistics'],['goals','Goals'],['activity','Activity']];
     $('#topNav').innerHTML=items.map(([k,n])=>`<button class="top-nav-btn ${view===k?'active':''}" data-view="${k}">${n}</button>`).join('');
     $$('.top-nav-btn').forEach(b=>b.onclick=()=>v2Navigate(b.dataset.view));
     v2IconNav(view);
@@ -1234,6 +1311,7 @@
   window.renderView = function(){
     if(view==='home'){renderV2Home();return;}
     if(view==='dex'){renderDex();return;}
+    if(view==='pokesnack'){$('#dexView').hidden=true;$('#view').hidden=false;renderPokeSnackMaker();return;}
     $('#dexView').hidden=true;$('#view').hidden=false;
     if(view==='team')renderTeam();
     else if(view==='types')renderTypeKnowledge();
@@ -1261,7 +1339,7 @@
 
   // Boot V1.1 after the V1.0 app has loaded its data and local state.
   function boot(){
-    document.title='Cobblemon LivingDex — V2.0.36';
+    document.title='Cobblemon LivingDex — V2.0.38';
     // Expose the V1.1/V1.2 views explicitly so the database layer and navigation
     // always call the same implementations.
     window.renderTraining = renderTraining;

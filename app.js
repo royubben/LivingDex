@@ -7,7 +7,7 @@ function pokeApiUrl(e){return `https://raw.githubusercontent.com/PokeAPI/sprites
 
 const SPRITE_FILE_OVERRIDES={"regional-bias-102-alolan":"0102_Exeggcute_#U2014_Alolan.png","regional-bias-104-alolan":"0104_Cubone_#U2014_Alolan.png","regional-bias-109-galarian":"0109_Koffing_#U2014_Galarian.png"};
 const $=s=>document.querySelector(s);const $$=s=>[...document.querySelectorAll(s)];
-const APP_VERSION='2.0.37';
+const APP_VERSION='2.0.40';
 let DATA,entries=[],tab='main',page=1,status='all',query='',selectedTypes=[],language='en',theme='dark',view='dex';
 const PAGE_SIZE=30;
 const state=JSON.parse(localStorage.getItem('cobblemon-livingdex-state')||'{}');
