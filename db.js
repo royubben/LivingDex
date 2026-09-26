@@ -472,7 +472,7 @@
       const trainerName=names.get(item.user_id);
       if(!trainerName)continue;
       const activity=Array.isArray(item.training?.__activity)?item.training.__activity:[];
-      for(const a of activity){if(a&&a.type)rows.push({...a,trainerName,activityUserId:item.user_id});}
+      for(const a of activity){if(a&&a.type&&!['team_add','team_remove'].includes(a.type))rows.push({...a,trainerName,activityUserId:item.user_id});}
     }
     rows.sort((a,b)=>Number(b.ts||0)-Number(a.ts||0));
     globalActivityCache=rows.slice(0,100); globalActivityCacheAt=now;

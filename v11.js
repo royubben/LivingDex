@@ -998,7 +998,7 @@
     else { const [_,loadedPosts]=await Promise.all([v2LoadGlobalActivity(),v2LoadCommunityPosts()]); posts=loadedPosts; v2FeedRowsCache={posts}; v2FeedRowsCacheAt=now; }
     if(!posts) posts=[];
     if(v2FeedRowsCache && !v2FeedRowsCache.global) v2FeedRowsCache.global=v2GlobalActivityRows();
-    const rawActivityRows=(v2FeedRowsCache?.global||v2GlobalActivityRows()).map(a=>({...a,__community:false,activity_id:a.id}));
+    const rawActivityRows=(v2FeedRowsCache?.global||v2GlobalActivityRows()).filter(a=>!['team_add','team_remove'].includes(a?.type)).map(a=>({...a,__community:false,activity_id:a.id}));
     const seenLinkedTrades=new Set(); const activityRows=rawActivityRows.filter(a=>{if(a.type!=='traded'||!a.linkedTradeId)return true;const k=String(a.linkedTradeId);if(seenLinkedTrades.has(k))return false;seenLinkedTrades.add(k);return true;});
     const postRows=posts.map(a=>({...a,__community:true}));
     let rows=[...activityRows,...postRows].filter(v2FeedFilterMatch).sort((a,b)=>Number(b.ts||0)-Number(a.ts||0)).slice(0,80);
@@ -1129,7 +1129,7 @@
   function v2RenderHomeFeed(mode='personal'){
     const el=$('#v2HomeFeed'); if(!el)return;
     document.body.dataset.v2FeedMode=mode;
-    const rows=mode==='global'?v2GlobalActivityRows():((typeof activityLog==='function'?activityLog():[]).filter(a=>a&&a.type).slice().sort((a,b)=>Number(b.ts||0)-Number(a.ts||0)).slice(0,12));
+    const rows=mode==='global'?v2GlobalActivityRows().filter(a=>!['team_add','team_remove'].includes(a?.type)):((typeof activityLog==='function'?activityLog():[]).filter(a=>a&&a.type&&!['team_add','team_remove'].includes(a.type)).slice().sort((a,b)=>Number(b.ts||0)-Number(a.ts||0)).slice(0,12));
     el.innerHTML=rows.length?rows.map(a=>`<div class="v2-feed-row"><span class="v2-feed-dot"></span><div class="v2-feed-row-main"><b>${escHtml(mode==='global'?v2GlobalActivityText(a):v2ActivityText(a))}</b><small>${escHtml(v2FeedWhen(a))}</small>${mode==='global'&&a.id?`<button class="v2-feed-comment-link" data-home-comment="${escHtml(a.id)}">Comment</button>`:''}</div></div>`).join(''):`<div class="v2-empty-feed">${mode==='global'?'No public player activity yet.':'Your Trainer activity will appear here as you play.'}</div>`;
     $$('#v2FeedPersonal,#v2FeedGlobal').forEach(b=>b.classList.toggle('active',(b.id==='v2FeedPersonal'&&mode==='personal')||(b.id==='v2FeedGlobal'&&mode==='global')));
     el.querySelectorAll('[data-home-comment]').forEach(b=>b.addEventListener('click',()=>v2Navigate('activity')));
