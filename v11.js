@@ -28,6 +28,10 @@
   })();
   const mainEntries = () => pageEntries('main');
   const caughtCount = () => mainEntries().filter(e => state[e.id]).length;
+  const pokemonCounts = () => { try { return window.pokemonCounts ||= JSON.parse(localStorage.getItem('cobblemon-livingdex-counts') || '{}'); } catch { return (window.pokemonCounts ||= {}); } };
+  const pokemonCount = id => Math.max(0, Number(pokemonCounts()[id] || (state[id] ? 1 : 0)));
+  const setPokemonCount = (id, count) => { const n=Math.max(0, Math.floor(Number(count)||0)); const c=pokemonCounts(); if(n>0)c[id]=n; else delete c[id]; localStorage.setItem('cobblemon-livingdex-counts',JSON.stringify(c)); window.LivingDexOnline?.queueSave?.(); };
+  const addPokemonCopy = id => setPokemonCount(id,pokemonCount(id)+1);
   const pct = (a,b) => b ? Math.round(a / b * 100) : 0;
   // Detail-view caches: opening the same Pokémon repeatedly should never rebuild
   // the expensive evolution/spawn/variant structures from scratch.
@@ -92,7 +96,41 @@
   const detailMovesHtml = e => {
     const groups=detailMoveGroupsFor(e);
     if(!groups.length) return `<div class="empty-panel">No move data available in the local Cobblemon species data.</div>`;
-    return `<div class="detail-move-groups">${groups.map(([g,moves])=>`<section class="detail-move-group"><div class="detail-mini-heading"><b>${escHtml(g)}</b><span>${moves.length}</span></div><div class="chips detail-move-chips">${moves.map(m=>`<span class="chip">${escHtml(prettyLabel(m))}</span>`).join('')}</div></section>`).join('')}</div>`;
+    return `<div class="detail-move-groups">${groups.map(([g,moves])=>`<section class="detail-move-group"><div class="detail-mini-heading"><b>${escHtml(g)}</b><span>${moves.length}</span></div><div class="chips detail-move-chips">${moves.map(m=>{const raw=String(m).replace(/^Level \d+\s+/,'');return `<button type="button" class="chip detail-move-chip" data-move-detail="${escHtml(raw)}">${escHtml(prettyLabel(m))}</button>`}).join('')}</div></section>`).join('')}</div>`;
+  };
+  const moveInfoCache = new Map();
+  let moveIndexPromise = null;
+  const normalizeMoveKey = value => String(value||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+  const getMoveSlug = async key => {
+    const normalized=normalizeMoveKey(key);
+    if(!moveIndexPromise){
+      moveIndexPromise=fetch('https://pokeapi.co/api/v2/move?limit=2000')
+        .then(r=>{if(!r.ok)throw new Error('Move index unavailable');return r.json();})
+        .then(data=>{const map=new Map();for(const x of (data.results||[])){const slug=String(x.name||'').toLowerCase();map.set(normalizeMoveKey(slug),slug);}return map;})
+        .catch(()=>new Map());
+    }
+    const map=await moveIndexPromise;
+    return map.get(normalized)||String(key||'').toLowerCase().trim();
+  };
+  const openMoveInfo = async (moveId) => {
+    const key=String(moveId||'').toLowerCase().trim(); if(!key)return;
+    let wrap=document.getElementById('moveInfoOverlay');
+    if(!wrap){ wrap=document.createElement('div'); wrap.id='moveInfoOverlay'; wrap.className='move-info-overlay'; document.body.appendChild(wrap); }
+    wrap.innerHTML=`<div class="move-info-modal"><button class="info-close" data-move-close>×</button><div class="eyebrow">MOVE INFORMATION</div><h2>${escHtml(prettyLabel(key))}</h2><div class="move-info-loading">Loading move data…</div></div>`;
+    wrap.hidden=false; wrap.querySelector('[data-move-close]').onclick=()=>{wrap.hidden=true;};
+    try{
+      let data=moveInfoCache.get(key);
+      if(!data){
+        const slug=await getMoveSlug(key);
+        const r=await fetch(`https://pokeapi.co/api/v2/move/${encodeURIComponent(slug)}`);
+        if(!r.ok)throw new Error('Move data unavailable');
+        data=await r.json(); moveInfoCache.set(key,data);
+      }
+      const effect=(data.effect_entries||[]).find(x=>x.language?.name==='en')?.short_effect || (data.flavor_text_entries||[]).find(x=>x.language?.name==='en')?.flavor_text || 'No description available.';
+      const stat=x=>x==null?'—':x;
+      wrap.querySelector('.move-info-modal').innerHTML=`<button class="info-close" data-move-close>×</button><div class="eyebrow">MOVE INFORMATION</div><h2>${escHtml(data.name?prettyLabel(data.name):prettyLabel(key))}</h2><div class="move-info-tags"><span>${escHtml(typeLabel(data.type?.name||'—'))}</span><span>${escHtml(prettyLabel(data.damage_class?.name||'—'))}</span><span>Priority ${stat(data.priority)}</span></div><p class="move-info-effect">${escHtml(effect)}</p><div class="move-info-grid"><div><b>Power</b><span>${stat(data.power)}</span></div><div><b>Accuracy</b><span>${data.accuracy==null?'—':data.accuracy+'%'}</span></div><div><b>PP</b><span>${stat(data.pp)}</span></div><div><b>Target</b><span>${escHtml(prettyLabel(data.target?.name||'—'))}</span></div><div><b>Damage class</b><span>${escHtml(prettyLabel(data.damage_class?.name||'—'))}</span></div><div><b>Effect chance</b><span>${data.effect_chance==null?'—':data.effect_chance+'%'}</span></div></div>`;
+      wrap.querySelector('[data-move-close]').onclick=()=>{wrap.hidden=true;};
+    }catch(err){ wrap.querySelector('.move-info-modal').innerHTML=`<button class="info-close" data-move-close>×</button><div class="eyebrow">MOVE INFORMATION</div><h2>${escHtml(prettyLabel(key))}</h2><div class="empty-panel">Move details could not be loaded right now.</div>`; wrap.querySelector('[data-move-close]').onclick=()=>{wrap.hidden=true;}; }
   };
   const detailBreedingHtml = e => {
     const sp=speciesForEntry(e)||{};
@@ -109,7 +147,7 @@
     const collection=pageEntries(tab), all=collection.length?collection:mainEntries();
     const idx=Math.max(0,all.findIndex(x=>x.id===e.id));
     const prev=all.length>1?all[(idx-1+all.length)%all.length]:null, next=all.length>1?all[(idx+1)%all.length]:null;
-    const types=entryTypes(e), caught=!!state[e.id], fav=!!favorites[e.id], variants=detailVariantsFor(e), gen=genFor(e);
+    const types=entryTypes(e), copyCount=pokemonCount(e.id), caught=copyCount>0, fav=!!favorites[e.id], variants=detailVariantsFor(e), gen=genFor(e);
     const [rarity,rarityClass]=detailRarityFor(e);
     const historyCount=detailHistoryFor(e).length;
     const location=e.box?`Box ${e.box} · slot ${e.slot||'—'}`:'Special collection';
@@ -118,7 +156,7 @@
     const navHtml=all.length>1?`<div class="detail-nav"><button id="detailPrev">← Previous</button><span>${idx+1} / ${all.length}</span><button id="detailNext">Next →</button></div>`:'';
     $('#infoContent').innerHTML=`<div class="detail-hero">
       <div class="detail-art"><img loading="eager" decoding="async" src="${spritePath(e)}" alt="${escHtml(e.name)}"></div>
-      <div class="detail-main"><div class="eyebrow">POKÉDEX #${String(e.dex).padStart(3,'0')}</div><h2>${escHtml(e.name)}</h2>${e.form?`<p class="detail-form">${escHtml(e.form)}</p>`:''}<div class="types detail-types">${types.map(t=>`<span class="type" style="${typeStyle(t)}">${escHtml(typeLabel(t))}</span>`).join('')}</div><div class="detail-rarity-pill ${rarityClass}">✦ ${escHtml(rarity)}</div><div class="detail-status"><span class="detail-status-pill ${caught?'is-caught':''}">${caught?'✓ Currently owned':'○ Not currently owned'}</span><span class="detail-status-pill ${fav?'is-favorite':''}">${fav?'★ Favorite':'☆ Not favorite'}</span></div><div class="detail-actions"><button id="detailCaught" class="${caught?'primary':'secondary'}">${caught?'✓ Caught':'Mark caught'}</button><button id="detailFav" class="secondary">${fav?'★ Favorite':'☆ Favorite'}</button><button id="detailTeam" class="secondary">${team.includes(e.id)?'✓ In Team':'＋ Add to Team'}</button></div></div>
+      <div class="detail-main"><div class="eyebrow">POKÉDEX #${String(e.dex).padStart(3,'0')}</div><h2>${escHtml(e.name)}</h2>${e.form?`<p class="detail-form">${escHtml(e.form)}</p>`:''}<div class="types detail-types">${types.map(t=>`<span class="type" style="${typeStyle(t)}">${escHtml(typeLabel(t))}</span>`).join('')}</div><div class="detail-rarity-pill ${rarityClass}">✦ ${escHtml(rarity)}</div><div class="detail-status"><span class="detail-status-pill ${caught?'is-caught':''}">${caught?`✓ Currently owned · ×${copyCount}`:'○ Not currently owned'}</span><span class="detail-status-pill ${fav?'is-favorite':''}">${fav?'★ Favorite':'☆ Not favorite'}</span></div><div class="detail-actions"><button id="detailCaught" class="${caught?'primary':'secondary'}">${caught?`✓ Collected ×${copyCount}`:'Mark caught'}</button><button id="detailAddCopy" class="secondary">＋ Add another</button><button id="detailFav" class="secondary">${fav?'★ Favorite':'☆ Favorite'}</button><button id="detailTeam" class="secondary">${team.includes(e.id)?'✓ In Team':'＋ Add to Team'}</button></div></div>
     </div>${navHtml}
     <div class="info-section"><div class="section-heading detail-section-heading"><div><span class="eyebrow">OVERVIEW</span><h3>Pokédex information</h3></div></div><div class="info-grid"><div class="info-item"><b>Generation</b><span>${gen?`Generation ${generationName(gen)}`:'Special / Cobblemon'}</span></div><div class="info-item"><b>Collection</b><span>${escHtml(collectionLabel)}</span></div><div class="info-item"><b>Location</b><span>${escHtml(location)}</span></div><div class="info-item"><b>Height</b><span>${sp.height!=null?(Number(sp.height)/10).toFixed(1)+' m':'—'}</span></div><div class="info-item"><b>Weight</b><span>${sp.weight!=null?(Number(sp.weight)/10).toFixed(1)+' kg':'—'}</span></div><div class="info-item"><b>Abilities</b><span>${escHtml((sp.abilities||[]).join(', ')||'—')}</span></div><div class="info-item"><b>Base experience</b><span>${sp.baseExperienceYield??'—'}</span></div><div class="info-item"><b>Catch rate</b><span>${sp.catchRate??'—'}</span></div><div class="info-item"><b>Personal history</b><span>${historyCount?`${historyCount} recorded event${historyCount===1?'':'s'}`:'No events yet'}</span></div></div></div>${formsHtml}
     <div class="info-section"><div class="section-heading detail-section-heading"><div><span class="eyebrow">EVOLUTION</span><h3>Evolution line</h3></div><span class="section-note">Lazy loaded</span></div><div id="detailEvolutionPanel"><div class="detail-lazy-placeholder">Evolution data loads after the Pokémon view is painted.</div></div></div>
@@ -140,8 +178,10 @@
     };
     $$('#infoDropdown .info-tab').forEach(t=>t.addEventListener('click',()=>hydrateDetailPanel(t.dataset.panel)));
     $$('#infoContent [data-detail-form]').forEach(b=>b.onclick=()=>openInfo(b.dataset.detailForm));
+    $('#infoContent')?.addEventListener('click',e=>{const b=e.target.closest('[data-move-detail]');if(!b)return;e.preventDefault();e.stopPropagation();openMoveInfo(b.dataset.moveDetail);});
     $$('#infoContent [data-evo-entry]').forEach(b=>b.onclick=()=>openInfo(b.dataset.evoEntry));
-    $('#detailCaught')?.addEventListener('click',()=>{const active=!state[e.id];if(active)state[e.id]=true;else delete state[e.id];recordActivity(active?'caught':'uncaught',{entryId:e.id,name:e.name});saveAll();touchDailyCompletion();openInfo(e.id);render();});
+    $('#detailCaught')?.addEventListener('click',()=>{const n=pokemonCount(e.id);if(n>0){if(n>1)setPokemonCount(e.id,n-1);else{setPokemonCount(e.id,0);delete state[e.id];recordActivity('uncaught',{entryId:e.id,name:e.name});}}else{setPokemonCount(e.id,1);state[e.id]=true;recordActivity('caught',{entryId:e.id,name:e.name});}saveAll();touchDailyCompletion();openInfo(e.id);render();});
+    $('#detailAddCopy')?.addEventListener('click',()=>{addPokemonCopy(e.id);state[e.id]=true;recordActivity('caught',{entryId:e.id,name:e.name,duplicate:true});saveAll();openInfo(e.id);});
     $('#detailFav')?.addEventListener('click',()=>{const active=!favorites[e.id];favorites[e.id]=active;if(!active)delete favorites[e.id];recordActivity(active?'favorite':'unfavorite',{entryId:e.id,name:e.name});saveAll();openInfo(e.id);});
     $('#detailTeam')?.addEventListener('click',()=>{if(team.includes(e.id)){toggleTeam(e.id);openInfo(e.id);return;}if(team.length>=6){alert('Your team is already full (6/6). Remove a Pokémon before adding another one.');return;}toggleTeam(e.id);openInfo(e.id);});
     $('#detailPrev')?.addEventListener('click',()=>prev&&openInfo(prev.id)); $('#detailNext')?.addEventListener('click',()=>next&&openInfo(next.id));
@@ -666,11 +706,13 @@
     const button=([id,icon,label])=>`<button class="v2-nav-item ${active===id?'active':''}" data-v2-view="${id}"><span class="v2-nav-icon">${icon}</span><span>${label}</span></button>`;
     const section=(label,items)=>`<div class="v2-nav-section"><span class="v2-nav-section-label">${label}</span>${items.map(button).join('')}</div>`;
     const side=document.querySelector('#v2SidebarNav');
-    if(side) side.innerHTML=section('TRAINER HUB',primary)+section('JOURNEY',journey)+section('SOCIAL',social);
+    if(side) side.innerHTML=section('TRAINER HUB',primary)+section('JOURNEY',journey)+section('SOCIAL',social)+`<div class="v2-nav-account"><button type="button" class="v2-account-action" id="v2AccountAction">${window.LivingDexOnline?.user?'↪ Sign out':'↗ Sign in'}</button></div>`;
     const mobileItems=[V2_NAV.find(x=>x[0]==='home'),V2_NAV.find(x=>x[0]==='activity'),V2_NAV.find(x=>x[0]==='dex'),V2_NAV.find(x=>x[0]==='training'),V2_NAV.find(x=>x[0]==='profile')];
     const mobile=document.querySelector('#v2MobileNav');
     if(mobile) mobile.innerHTML=mobileItems.map(([id,icon,label])=>`<button class="v2-mobile-item ${active===id?'active':''}" data-v2-view="${id}"><span>${icon}</span><small>${id==='profile'?'Trainer':label}</small></button>`).join('');
     document.querySelectorAll('[data-v2-view]').forEach(b=>b.onclick=()=>v2Navigate(b.dataset.v2View));
+    const account=document.querySelector('#v2AccountAction');
+    if(account) account.onclick=()=>window.LivingDexOnline?.user?window.LivingDexOnline.logout?.():window.LivingDexOnline?.login?.();
   }
   let v2FeedLiveTimer=null;
   function v2StopFeedLive(){if(v2FeedLiveTimer){clearInterval(v2FeedLiveTimer);v2FeedLiveTimer=null;}}
@@ -741,6 +783,44 @@
     $('#v2TrainerBadges')?.addEventListener('click',()=>window.openFeaturedBadgeEditor?.());
     $('#v2TrainerTeam')?.addEventListener('click',()=>v2Navigate('team'));
   }
+
+  function buildV2TrainerCardMarkup(data={}){
+    const p=data.profile||{};
+    const meta=data.meta||{};
+    const caught=Number(data.caught||0), total=Number(data.total||entries.length||0), pct=v2Pct(caught,total);
+    const xp=data.xp||{xp:0,level:1,intoLevel:0};
+    const daily=data.daily||{streak:0,bestStreak:0};
+    const badges=Array.isArray(data.badges)?data.badges:[];
+    const featured=Array.isArray(data.featured)?data.featured.slice(0,5):[];
+    const favId=p.favoritePokemon||p.favorite_pokemon||meta.favoritePokemon||meta.favorite_pokemon||'';
+    const fav=entries.find(e=>e.name===favId||e.id===favId);
+    const teamIds=Array.isArray(data.team)?data.team.slice(0,6):[];
+    const teamCards=teamIds.map(id=>{const e=entries.find(x=>x.id===id||x.name===id);return e?`<div class="v2-trainer-team-mon"><img loading="lazy" decoding="async" src="${escHtml(spritePath(e))}" alt="${escHtml(e.name)}"><span>${escHtml(e.name)}</span></div>`:'';}).join('')||'<div class="v2-trainer-empty">No team selected yet.</div>';
+    const genRows=(Array.isArray(data.generations)?data.generations:[]).map(g=>`<div class="v2-trainer-progress-row"><span>Generation ${g.g}</span><div><i style="width:${Number(g.pct||0)}%"></i></div><b>${Number(g.pct||0)}%</b></div>`).join('');
+    const typeRows=(Array.isArray(data.types)?data.types:[]).slice().sort((a,b)=>Number(b.p||0)-Number(a.p||0)).slice(0,6).map(t=>`<div class="v2-trainer-type-row"><span>${escHtml(typeLabel(t.t))}</span><div><i style="width:${Number(t.p||0)}%"></i></div><b>${Number(t.p||0)}%</b></div>`).join('');
+    const banner=meta.banner||p.banner||'aurora';
+    const ign=meta.ign||p.ign||'';
+    const bio=meta.bio||p.bio||'';
+    const favoriteArt=fav?`<img class="v2-trainer-favorite-art" loading="lazy" decoding="async" src="${escHtml(spritePath(fav))}" alt="${escHtml(fav.name)}">`:'';
+    const stats=data.stats||{};
+    return `<div class="v2-trainer-page v2-public-trainer-card">
+      <section class="v2-trainer-hero banner-${escHtml(banner)}">
+        <div class="v2-trainer-hero-glow"></div>
+        <div class="v2-trainer-identity"><div class="v2-trainer-avatar">◈</div><div><span class="eyebrow">TRAINER CARD 2.0</span><h2>${escHtml(p.name||p.trainerName||p.display_name||'Trainer')}</h2><p>${ign?`IGN · ${escHtml(ign)} · `:''}Trainer OS</p>${bio?`<div class="v2-trainer-bio">${escHtml(bio)}</div>`:''}</div></div>
+        <div class="v2-trainer-hero-actions"><div class="v2-level-pill"><strong>LV ${xp.level}</strong><span>${xp.intoLevel}/100 XP</span></div></div>${favoriteArt}
+      </section>
+      <section class="v2-trainer-stat-grid"><article><span>LivingDex</span><strong>${pct}%</strong><small>${caught.toLocaleString()} / ${total.toLocaleString()} caught</small></article><article><span>Trainer XP</span><strong>${Number(xp.xp||0).toLocaleString()}</strong><small>${Math.max(0,100-Number(xp.intoLevel||0))} XP to next level</small></article><article><span>Daily Streak</span><strong>🔥 ${Number(daily.streak||0)}</strong><small>Best ${Number(daily.bestStreak||0)}</small></article><article><span>Rewards</span><strong>${badges.length}</strong><small>earned milestones</small></article></section>
+      <div class="v2-trainer-columns"><div class="v2-trainer-main">
+        <section class="v2-trainer-panel v2-trainer-progress-panel"><div class="v2-trainer-panel-head"><div><span class="eyebrow">COLLECTION PROGRESS</span><h3>How far they've come</h3></div><strong>${pct}%</strong></div><div class="v2-trainer-wide-progress"><i style="width:${pct}%"></i></div><div class="v2-trainer-progress-grid">${genRows||'<div class="v2-trainer-empty">Generation progress unavailable.</div>'}</div></section>
+        <section class="v2-trainer-panel"><div class="v2-trainer-panel-head"><div><span class="eyebrow">FEATURED</span><h3>Featured badges</h3></div></div><div class="v2-trainer-badges">${featured.map(b=>`<div class="v2-trainer-badge"><img loading="lazy" decoding="async" src="${escHtml(b.asset)}" alt="${escHtml(b.name)}"><b>${escHtml(b.name)}</b></div>`).join('')||'<div class="v2-trainer-empty">No featured badges selected.</div>'}</div></section>
+        <section class="v2-trainer-panel"><div class="v2-trainer-panel-head"><div><span class="eyebrow">TYPE COLLECTION</span><h3>Strongest types</h3></div></div><div class="v2-trainer-type-list">${typeRows||'<div class="v2-trainer-empty">No type progress yet.</div>'}</div></section>
+      </div><aside class="v2-trainer-side">
+        <section class="v2-trainer-panel v2-trainer-favorite-panel"><span class="eyebrow">FAVOURITE POKÉMON</span><h3>${fav?escHtml(fav.name):'No favourite selected'}</h3>${favoriteArt?`<div class="v2-trainer-favorite-wrap">${favoriteArt}</div>`:'<p>This Trainer has not selected a favourite Pokémon.</p>'}</section>
+        <section class="v2-trainer-panel"><div class="v2-trainer-panel-head"><div><span class="eyebrow">TEAM</span><h3>Current squad</h3></div></div><div class="v2-trainer-team">${teamCards}</div></section>
+        <section class="v2-trainer-panel v2-trainer-quick-stats"><span class="eyebrow">TRAINER RECORD</span><div><b>${Number(stats.favoriteCount||0)}</b><small>Favorites</small></div><div><b>${Number(stats.fullBoxes||0)}</b><small>Full boxes</small></div><div><b>${Number(stats.training?.totalQuestions||0)}</b><small>Training questions</small></div><div><b>${Number(stats.training?.accuracy||0)}%</b><small>Training accuracy</small></div></section>
+      </aside></div></div>`;
+  }
+  window.buildV2TrainerCardMarkup=buildV2TrainerCardMarkup;
 
   function v2DailySnapshot(){
     try{ window.touchDailyCompletion?.(); }catch{}
@@ -820,6 +900,45 @@
   }
   function v2FeedIcon(a){return a?.type==='caught'?'✦':a?.type==='evolved'?'↗':a?.type==='traded'?'⇄':a?.type==='training_complete'?'⚔':a?.type?.startsWith('daily')?'★':'•';}
   function v2FeedWhen(a){return a?.ts?new Date(Number(a.ts)).toLocaleString([], {day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):(a?.date||'');}
+
+  let v2FeedFilter='all';
+  let v2CommunityPostsCache=[];
+  function v2CommunityPostKindLabel(k){return ({looking_for:'LOOKING FOR',trade_offer:'LOOKING FOR',discussion:'TRAINER POST',trainer_post:'TRAINER POST'})[k]||'TRAINER POST';}
+  function v2CommunityPokemonNames(list){return (Array.isArray(list)?list:[]).map(x=>typeof x==='string'?x:(x?.name||'')).filter(Boolean);}
+  function v2CommunityPokemonCards(list,empty='No Pokémon selected'){
+    const names=v2CommunityPokemonNames(list); if(!names.length)return `<span class="v2-community-none">${empty}</span>`;
+    const limited=names.slice(0,5); return `<div class="v2-community-mon-grid" data-count="${limited.length}">${limited.map(name=>{const e=entries.find(x=>String(x.name).toLowerCase()===String(name).toLowerCase()||String(x.id)===String(name));const qty=e?Number(state[e.id]||0):0;return `<div class="v2-community-mon"><div class="v2-community-mon-art">${e?`<img loading="lazy" src="${escHtml(spritePath(e))}" alt="${escHtml(e.name)}">`:'?'}</div><b>${escHtml(e?.name||name)}</b>${qty>1?`<small>×${qty}</small>`:''}</div>`;}).join('')}</div>`;
+  }
+  function v2CommunityPostComposer(){
+    if(!window.isOnlineTrainerV17?.()){alert('Sign in to create a community post.');return;}
+    const wrap=document.createElement('div');wrap.id='v2CommunityComposer';wrap.className='v2-community-modal-wrap';
+    wrap.innerHTML=`<div class="v2-community-modal"><button class="info-close" data-close>×</button><div class="eyebrow">TRAINER COMMUNITY</div><h2>Create a post</h2><p>Share something with the Trainer community.</p><label>Post type<select id="communityKind"><option value="trainer_post">📣 Trainer Post</option><option value="looking_for">🔍 Looking For</option></select></label><label>Title<input id="communityTitle" maxlength="100" placeholder="Give your post a title…"></label><label>Message<textarea id="communityBody" maxlength="1000" rows="4" placeholder="What do you want other Trainers to know?"></textarea></label><div id="communityPokemonFields"></div><div class="v2-community-modal-actions"><button class="secondary" data-close>Cancel</button><button class="primary" id="communityPublish">Publish Post</button></div></div>`;
+    document.body.appendChild(wrap);wrap.addEventListener('click',e=>{if(e.target===wrap||e.target.closest('[data-close]'))wrap.remove();});
+    const fields=wrap.querySelector('#communityPokemonFields'); let wanted=[],offered=[];
+    const ownedEntries=()=>entries.filter(e=>Number(state[e.id]||0)>0);
+    const picker=(id,label,arr,kind)=>`<div class="v2-community-picker"><b>${label}</b><div class="v2-community-picker-row"><input id="${id}" placeholder="Search Pokémon…" autocomplete="off"><button type="button" data-add-community="${kind}">Add</button></div><div class="v2-community-selected" data-selected="${kind}"></div><div class="v2-community-suggestions" data-suggestions="${kind}"></div></div>`;
+    function defaults(kind){
+      const title=wrap.querySelector('#communityTitle'),body=wrap.querySelector('#communityBody');
+      if(kind==='looking_for'){title.value=title.value||'Looking for Pokémon';body.value=body.value||'I am looking for the following Pokémon.';}
+      else {title.value=title.value||'Trainer Post';body.value=body.value||'Share something with the community.';}
+    }
+    function drawFields(){const kind=wrap.querySelector('#communityKind').value;defaults(kind);fields.innerHTML=kind==='looking_for'?picker('communityWanted','🔍 Looking for',wanted,'wanted'):'';if(kind==='looking_for')bindPicker();}
+    function bindPicker(){const kind='wanted',input=wrap.querySelector('#communityWanted'),suggestions=wrap.querySelector('[data-suggestions="wanted"]');if(!input)return;const draw=()=>{const q=norm(input.value);const hits=entries.filter(e=>!q||norm(e.name).includes(q)).slice(0,8);suggestions.innerHTML=hits.map(e=>`<button type="button" data-pick-community="${escHtml(e.name)}"><img src="${escHtml(spritePath(e))}" alt="">${escHtml(e.name)}</button>`).join('');};input.oninput=draw;draw();suggestions.onclick=e=>{const b=e.target.closest('[data-pick-community]');if(!b)return;if(!wanted.includes(b.dataset.pickCommunity)&&wanted.length<5)wanted.push(b.dataset.pickCommunity);input.value='';draw();drawSelected();};drawSelected();}
+    function drawSelected(){const el=wrap.querySelector('[data-selected="wanted"]');if(!el)return;el.innerHTML=wanted.map(n=>`<button type="button" data-remove-community="${escHtml(n)}">${escHtml(n)} ×</button>`).join('');el.onclick=e=>{const b=e.target.closest('[data-remove-community]');if(!b)return;const i=wanted.indexOf(b.dataset.removeCommunity);if(i>=0)wanted.splice(i,1);drawSelected();};}
+    wrap.querySelector('#communityKind').onchange=()=>{wanted=[];offered=[];drawFields();};drawFields();
+    wrap.querySelector('#communityPublish').onclick=async()=>{const btn=wrap.querySelector('#communityPublish');btn.disabled=true;const kind=wrap.querySelector('#communityKind').value;const r=await window.createCommunityPostV18?.({kind,title:wrap.querySelector('#communityTitle').value,body:wrap.querySelector('#communityBody').value,wanted_pokemon:wanted,offered_pokemon:[]});if(!r?.ok){alert(r?.error||'Post could not be published.');btn.disabled=false;return;}wrap.remove();v2FeedRowsCache=null;v2RenderFeed();};
+  }
+  async function v2LoadCommunityPosts(){const rows=await window.getCommunityPostsV18?.()||[];v2CommunityPostsCache=Array.isArray(rows)?rows:[];return v2CommunityPostsCache;}
+  function v2FeedFilterMatch(a){if(v2FeedFilter==='all')return true;if(a.__community){if(v2FeedFilter==='looking_for')return a.kind==='looking_for'||a.kind==='trade_offer';if(v2FeedFilter==='trainer_post')return a.kind==='trainer_post'||a.kind==='discussion';return false;}return v2FeedFilter==='activity';}
+  function v2CommunityPostMarkup(a,comments,reactions){
+    const reactionData=reactions.get(a.activity_id)||{counts:{},mine:''};
+    const kind=a.kind; const title=a.title||v2CommunityPostKindLabel(kind); const wanted=a.wanted_pokemon||[], offered=a.offered_pokemon||[];
+    const tradeButton=(kind==='looking_for'||kind==='trade_offer')&&a.trainerId!==window.getCurrentTrainerIdV17?.()?`<button type="button" class="v2-community-help" data-community-help="${escHtml(a.id)}">🤝 I can help / Make an offer</button>`:'';
+    const deleteButton=a.trainerId===window.getCurrentTrainerIdV17?.()?`<button type="button" class="v2-community-delete" data-community-delete="${escHtml(a.id)}">Delete post</button>`:'';
+    const content=kind==='trade_offer'?`<div class="v2-community-trade-grid"><section><span>LOOKING FOR</span>${v2CommunityPokemonCards(wanted,'Anything')}</section><section><span>OFFERING</span>${v2CommunityPokemonCards(offered,'Open to offers')}</section></div>`:kind==='looking_for'?`<section class="v2-community-looking"><span>LOOKING FOR</span>${v2CommunityPokemonCards(wanted,'Tell the community what you need.')}</section>`:'';
+    return `<article class="v2-feed-post v2-social-post v2-community-post"><div class="v2-feed-post-top"><div class="v2-feed-author"><div class="v2-feed-avatar">${escHtml(String(a.trainerName||'T').slice(0,1).toUpperCase())}</div><div><b>${escHtml(a.trainerName||'Trainer')}</b><small>${escHtml(v2FeedWhen(a))}</small></div></div><span class="v2-feed-action-pill">${v2CommunityPostKindLabel(kind)}</span></div><div class="v2-community-copy"><h3>${escHtml(title)}</h3><p>${escHtml(a.body||'')}</p>${content}${tradeButton}${deleteButton}</div><div class="v2-feed-social-bar">${v2ReactionMarkup({id:a.activity_id},reactionData)}<span class="v2-feed-comment-count">${comments.length} comments</span></div>${v2CommentMarkup({id:a.activity_id},comments)}</article>`;
+  }
+  function v2CommunityFilters(){return `<div class="v2-community-toolbar"><button class="v2-community-create primary" id="v2CreateCommunityPost">＋ Create Post</button><div class="v2-community-filters"><button data-feed-filter="all" class="${v2FeedFilter==='all'?'active':''}">All</button><button data-feed-filter="looking_for" class="${v2FeedFilter==='looking_for'?'active':''}">🔍 Looking For</button><button data-feed-filter="trainer_post" class="${v2FeedFilter==='trainer_post'?'active':''}">📣 Posts</button><button data-feed-filter="activity" class="${v2FeedFilter==='activity'?'active':''}">⚡ Activity</button></div></div>`;}
   function v2FeedEntry(a){
     const id=a?.entryId||'';
     let e=entries.find(x=>String(x.id)===String(id));
@@ -831,6 +950,11 @@
     const e=v2FeedEntry(a);
     if(!e)return '';
     return `<div class="v2-feed-pokemon-media"><div class="v2-feed-pokemon-glow"></div><img loading="lazy" decoding="async" src="${escHtml(spritePath(e))}" alt="${escHtml(e.name)}"><span>#${escHtml(String(e.num||e.id||''))}</span></div>`;
+  }
+  function v2TradeMarkup(a){
+    const from=v2FeedEntry({entryId:a.sourceEntryId,name:a.sourceName}),to=v2FeedEntry({entryId:a.entryId,name:a.name});
+    const leftName=a.trainerName||'Trainer',rightName=a.tradePartnerName||'Unknown Trainer';
+    return `<div class="v2-linked-trade"><div class="v2-linked-trainer"><span>${escHtml(leftName)}</span>${from?`<img loading="lazy" decoding="async" src="${escHtml(spritePath(from))}" alt="${escHtml(from.name)}">`:''}<b>${escHtml(from?.name||a.sourceName||'Pokémon')}</b></div><div class="v2-linked-arrow">⇄</div><div class="v2-linked-trainer"><span>${escHtml(rightName)}</span>${to?`<img loading="lazy" decoding="async" src="${escHtml(spritePath(to))}" alt="${escHtml(to.name)}">`:''}<b>${escHtml(to?.name||a.name||'Pokémon')}</b></div></div>`;
   }
   function v2FeedMeta(a){
     const e=v2FeedEntry(a);
@@ -846,28 +970,112 @@
     const safe=Array.isArray(comments)?comments:[];
     return `<div class="v2-feed-comments" data-comments-for="${escHtml(a.id||'')}"><div class="v2-comments-list">${safe.map(c=>`<div class="v2-comment"><div class="v2-comment-avatar">${escHtml(String(c.display_name||'T').slice(0,1).toUpperCase())}</div><div><b>${escHtml(c.display_name||'Trainer')}</b><span>${escHtml(c.body||'')}</span></div><small>${escHtml(c.created_at?new Date(c.created_at).toLocaleString([], {day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):'')}</small></div>`).join('')||'<div class="v2-comments-empty">Be the first to say something.</div>'}</div><form class="v2-comment-form" data-comment-form="${escHtml(a.id||'')}"><input maxlength="280" placeholder="Write a comment…" aria-label="Write a comment"><button type="submit">Post</button></form></div>`;
   }
-  async function v2LoadFeedComments(activityIds){if(typeof window.getFeedCommentsV17!=='function')return [];try{return await window.getFeedCommentsV17(activityIds||[]);}catch(err){console.warn('Feed comments unavailable',err);return [];}}
-  async function v2LoadFeedReactions(activityIds){if(typeof window.getFeedReactionsV17!=='function')return new Map();try{return await window.getFeedReactionsV17(activityIds||[]);}catch(err){console.warn('Feed reactions unavailable',err);return new Map();}}
-  function v2AttachFeedInteractions(root){
-    root?.querySelectorAll('[data-comment-form]').forEach(form=>form.addEventListener('submit',async e=>{e.preventDefault();const input=form.querySelector('input'),body=(input?.value||'').trim(),activityId=form.dataset.commentForm;if(!body||!activityId)return;if(!window.isOnlineTrainerV17?.()){alert('Sign in to comment on the Feed.');return;}const btn=form.querySelector('button');if(btn)btn.disabled=true;try{const ok=await window.postFeedCommentV17?.(activityId,body);if(!ok){alert('Could not post the comment.');return;}input.value='';await v2RenderFeed();}finally{if(btn)btn.disabled=false;}}));
-    root?.querySelectorAll('[data-reaction]').forEach(btn=>btn.addEventListener('click',async()=>{const activityId=btn.dataset.activityId,reaction=btn.dataset.reaction;if(!activityId)return;if(!window.isOnlineTrainerV17?.()){alert('Sign in to react on the Feed.');return;}btn.disabled=true;try{const ok=await window.toggleFeedReactionV17?.(activityId,reaction);if(!ok){const detail=window.getLastFeedReactionErrorV17?.()||'Onbekende databasefout.';alert(`Deze reactie kon niet worden opgeslagen.\n\n${detail}\n\nControleer of de Social Feed migration in Supabase is uitgevoerd.`);return;}await v2RenderFeed();}finally{btn.disabled=false;}}));
+  let v2FeedSocialCache={key:'',comments:[],reactions:new Map(),at:0};
+  async function v2LoadFeedSocial(activityIds=[]){
+    const ids=[...activityIds].filter(Boolean), key=ids.join('|'), now=Date.now();
+    if(v2FeedSocialCache.key===key && now-v2FeedSocialCache.at<15000)return {comments:v2FeedSocialCache.comments,reactions:v2FeedSocialCache.reactions};
+    const [comments,reactions]=await Promise.all([
+      typeof window.getFeedCommentsV17==='function'?window.getFeedCommentsV17(ids):Promise.resolve([]),
+      typeof window.getFeedReactionsV17==='function'?window.getFeedReactionsV17(ids):Promise.resolve(new Map())
+    ]);
+    v2FeedSocialCache={key,comments:comments||[],reactions:reactions||new Map(),at:Date.now()};
+    return v2FeedSocialCache;
   }
+  async function v2LoadFeedComments(activityIds){return (await v2LoadFeedSocial(activityIds)).comments;}
+  async function v2LoadFeedReactions(activityIds){return (await v2LoadFeedSocial(activityIds)).reactions;}
+  function v2AttachFeedInteractions(root){
+    root?.querySelectorAll('[data-comment-form]').forEach(form=>form.addEventListener('submit',async e=>{e.preventDefault();const input=form.querySelector('input'),body=(input?.value||'').trim(),activityId=form.dataset.commentForm;if(!body||!activityId)return;if(!window.isOnlineTrainerV17?.()){alert('Sign in to comment on the Feed.');return;}const btn=form.querySelector('button');if(btn)btn.disabled=true;try{const ok=await window.postFeedCommentV17?.(activityId,body);if(!ok){alert('Could not post the comment.');return;}input.value='';const feedScroll=document.querySelector('.v2-feed-list')?.scrollTop||0;const pageScroll=window.scrollY||window.pageYOffset||0;v2FeedSocialCache.at=0;v2FeedRowsCache=null;await v2RenderFeed({silent:true});requestAnimationFrame(()=>{const next=document.querySelector('.v2-feed-list');if(next)next.scrollTop=feedScroll;window.scrollTo(0,pageScroll);requestAnimationFrame(()=>{const n=document.querySelector('.v2-feed-list');if(n)n.scrollTop=feedScroll;window.scrollTo(0,pageScroll);});});}finally{if(btn)btn.disabled=false;}}));
+    root?.querySelectorAll('[data-community-delete]').forEach(btn=>btn.addEventListener('click',async()=>{const id=btn.dataset.communityDelete;if(!id||!confirm('Delete this post?'))return;btn.disabled=true;const r=await window.deleteCommunityPostV18?.(id);if(!r?.ok){alert(r?.error||'Could not delete the post.');btn.disabled=false;return;}v2FeedRowsCache=null;await v2RenderFeed({silent:true});}));    root?.querySelectorAll('[data-delete-activity]').forEach(btn=>btn.addEventListener('click',async()=>{const id=btn.dataset.deleteActivity;if(!id||!confirm('Delete this Feed post?'))return;btn.disabled=true;const r=await window.deleteFeedActivityV17?.(id);if(!r?.ok){alert(r?.error||'Could not delete the post.');btn.disabled=false;return;}v2FeedRowsCache=null;v2FeedRowsCacheAt=0;v2FeedSocialCache.at=0;await v2RenderFeed({silent:true});}));
+    root?.querySelectorAll('[data-reaction]').forEach(btn=>btn.addEventListener('click',async()=>{const activityId=btn.dataset.activityId,reaction=btn.dataset.reaction;if(!activityId)return;if(!window.isOnlineTrainerV17?.()){alert('Sign in to react on the Feed.');return;}btn.disabled=true;try{const ok=await window.toggleFeedReactionV17?.(activityId,reaction);if(!ok){const detail=window.getLastFeedReactionErrorV17?.()||'Onbekende databasefout.';alert(`Deze reactie kon niet worden opgeslagen.\n\n${detail}\n\nControleer of de Social Feed migration in Supabase is uitgevoerd.`);return;}v2FeedSocialCache.at=0;v2FeedRowsCache=null;await v2RenderFeed();}finally{btn.disabled=false;}}));
+  }
+  let v2FeedRowsCache=null,v2FeedRowsCacheAt=0;
   async function v2RenderFeed(opts={}){
     document.body.dataset.v2FeedMode='global';
-    await v2LoadGlobalActivity();
-    const rows=v2GlobalActivityRows().slice(0,60);
-    const comments=await v2LoadFeedComments(rows.map(a=>a.id).filter(Boolean));
-    const reactions=await v2LoadFeedReactions(rows.map(a=>a.id).filter(Boolean));
+    try{await window.syncTrainerTradeStateV28?.();}catch{}
+    const now=Date.now();
+    let posts;
+    if(v2FeedRowsCache&&now-v2FeedRowsCacheAt<10000){ posts=v2FeedRowsCache.posts; }
+    else { const [_,loadedPosts]=await Promise.all([v2LoadGlobalActivity(),v2LoadCommunityPosts()]); posts=loadedPosts; v2FeedRowsCache={posts}; v2FeedRowsCacheAt=now; }
+    if(!posts) posts=[];
+    if(v2FeedRowsCache && !v2FeedRowsCache.global) v2FeedRowsCache.global=v2GlobalActivityRows();
+    const rawActivityRows=(v2FeedRowsCache?.global||v2GlobalActivityRows()).map(a=>({...a,__community:false,activity_id:a.id}));
+    const seenLinkedTrades=new Set(); const activityRows=rawActivityRows.filter(a=>{if(a.type!=='traded'||!a.linkedTradeId)return true;const k=String(a.linkedTradeId);if(seenLinkedTrades.has(k))return false;seenLinkedTrades.add(k);return true;});
+    const postRows=posts.map(a=>({...a,__community:true}));
+    let rows=[...activityRows,...postRows].filter(v2FeedFilterMatch).sort((a,b)=>Number(b.ts||0)-Number(a.ts||0)).slice(0,80);
+    const ids=rows.map(a=>a.activity_id||a.id).filter(Boolean);
+    const comments=await v2LoadFeedComments(ids); const reactions=await v2LoadFeedReactions(ids);
     const byId=new Map();comments.forEach(c=>{const id=c.activity_id;if(!byId.has(id))byId.set(id,[]);byId.get(id).push(c);});
     const html=rows.length?rows.map(a=>{
-      const text=v2GlobalActivityText(a), e=v2FeedEntry(a), media=v2FeedMedia(a), reactionData=reactions.get(a.id)||{counts:{},mine:''};
+      const id=a.activity_id||a.id, cs=byId.get(id)||[];
+      if(a.__community)return v2CommunityPostMarkup(a,cs,reactions);
+      const text=v2GlobalActivityText(a), e=v2FeedEntry(a), media=v2FeedMedia(a), reactionData=reactions.get(id)||{counts:{},mine:''};
       const actionLabel=a.type==='caught'?'CAUGHT':a.type==='evolved'?'EVOLVED':a.type==='traded'?'TRADE':a.type==='training_complete'?'TRAINING':a.type?.startsWith('daily')?'DAILY':'TRAINER UPDATE';
-      return `<article class="v2-feed-post v2-social-post"><div class="v2-feed-post-top"><div class="v2-feed-author"><div class="v2-feed-avatar">${escHtml(String(a.trainerName||'Trainer').slice(0,1).toUpperCase())}</div><div><b>${escHtml(a.trainerName||'Trainer')}</b><small>${escHtml(v2FeedWhen(a))}</small></div></div><span class="v2-feed-action-pill">${actionLabel}</span></div><div class="v2-feed-copy"><strong>${escHtml(text)}</strong>${e?`<div class="v2-feed-pokemon-meta">${v2FeedMeta(a)}</div>`:''}</div>${media}<div class="v2-feed-social-bar">${v2ReactionMarkup(a,reactionData)}<span class="v2-feed-comment-count">${(byId.get(a.id)||[]).length} comments</span></div>${a.id?v2CommentMarkup(a,byId.get(a.id)||[]):''}</article>`;
-    }).join(''):`<div class="v2-empty-feed"><strong>The Feed is quiet.</strong><span>When public Trainers catch, evolve, trade or train, their stories will appear here.</span></div>`;
-    $('#view').innerHTML=`<div class="page-card v2-rich-page v2-feed-page"><div class="v2-feed-hero"><div><div class="eyebrow">TRAINER SOCIAL</div><h2>Feed</h2><p>See what Trainers are doing, celebrate their catches and join the conversation.</p></div><div class="v2-feed-hero-mark">✦<span>LIVE TRAINER ACTIVITY</span></div></div><div class="v2-feed-list">${html}</div></div>`;
+      const ownActivity=a.activityUserId===window.getCurrentTrainerIdV17?.();
+      const deleteActivity=ownActivity?`<button type="button" class="v2-feed-delete" data-delete-activity="${escHtml(id)}" title="Delete post">Delete</button>`:'';
+      return `<article class="v2-feed-post v2-social-post"><div class="v2-feed-post-top"><div class="v2-feed-author"><div class="v2-feed-avatar">${escHtml(String(a.trainerName||'Trainer').slice(0,1).toUpperCase())}</div><div><b>${a.type==='traded'?escHtml(a.trainerName||'Trainer')+' & '+escHtml(a.tradePartnerName||'Unknown Trainer'):escHtml(a.trainerName||'Trainer')}</b><small>${escHtml(v2FeedWhen(a))}</small></div></div><div class="v2-feed-post-head-actions"><span class="v2-feed-action-pill">${actionLabel}</span>${deleteActivity}</div></div><div class="v2-feed-copy"><strong>${a.type==='traded'?escHtml((a.trainerName||'Trainer')+' and '+(a.tradePartnerName||'Unknown Trainer')+' just had a trade.'):escHtml(text)}</strong>${a.type==='traded'?v2TradeMarkup(a):e?`<div class="v2-feed-pokemon-meta">${v2FeedMeta(a)}</div>`:''}</div>${a.type==='traded'?'':media}<div class="v2-feed-social-bar">${v2ReactionMarkup({id},reactionData)}<span class="v2-feed-comment-count">${cs.length} comments</span></div>${id?v2CommentMarkup({id},cs):''}</article>`;
+    }).join(''):`<div class="v2-empty-feed"><strong>No posts here yet.</strong><span>Be the first Trainer to start the conversation.</span></div>`;
+    $('#view').innerHTML=`<div class="page-card v2-rich-page v2-feed-page"><div class="v2-feed-hero"><div><div class="eyebrow">TRAINER COMMUNITY</div><h2>Feed</h2><p>Trade, find Pokémon, share discoveries and connect with other Trainers.</p></div><div class="v2-feed-hero-mark">✦<span>LIVE COMMUNITY</span></div></div>${v2CommunityFilters()}<div class="v2-feed-list">${html}</div></div>`;
+    $('#v2CreateCommunityPost')?.addEventListener('click',v2CommunityPostComposer);
+    $$('[data-feed-filter]').forEach(b=>b.onclick=()=>{v2FeedFilter=b.dataset.feedFilter;v2RenderFeed();});
     v2AttachFeedInteractions(document.querySelector('#view'));
+    document.querySelectorAll('[data-community-help]').forEach(b=>b.onclick=()=>v2OpenTradeRequest(b.dataset.communityHelp));
     v2StartFeedLive();
   }
+  async function v2OpenTradeRequest(postId){
+    if(!window.isOnlineTrainerV17?.()){alert('Sign in to contact this Trainer.');return;}
+    const post=v2CommunityPostsCache.find(p=>String(p.id)===String(postId)); if(!post)return;
+    const wrap=document.createElement('div');wrap.className='v2-community-modal-wrap';wrap.innerHTML=`<div class="v2-community-modal"><button class="info-close" data-close>×</button><div class="eyebrow">TRADE REQUEST</div><h2>Contact ${escHtml(post.trainerName)}</h2><p>${escHtml(post.title||'Trade request')}</p>${post.wanted_pokemon?.length?`<div class="v2-community-trade-preview"><span>THEY ARE LOOKING FOR</span>${v2CommunityPokemonCards(post.wanted_pokemon,'No Pokémon specified')}</div>`:''}<div class="v2-community-picker"><b>🤝 What can you offer?</b><input id="tradeOfferSearch" placeholder="Search your Pokémon…" autocomplete="off"><div class="v2-community-selected" id="tradeOfferSelected"></div><div class="v2-community-suggestions" id="tradeOfferSuggestions"></div></div><label>Message<textarea id="tradeMessage" maxlength="500" rows="4" placeholder="Tell them what you can offer…"></textarea></label><div class="v2-community-modal-actions"><button class="secondary" data-close>Cancel</button><button class="primary" id="sendTradeRequest">Send Request</button></div></div>`;
+    document.body.appendChild(wrap);wrap.addEventListener('click',e=>{if(e.target===wrap||e.target.closest('[data-close]'))wrap.remove();});
+    const owned=entries.filter(e=>Number(state[e.id]||0)>0), offered=[];const input=wrap.querySelector('#tradeOfferSearch'),suggestions=wrap.querySelector('#tradeOfferSuggestions'),selected=wrap.querySelector('#tradeOfferSelected');
+    const draw=()=>{const q=norm(input.value);const hits=owned.filter(e=>!q||norm(e.name).includes(q)).slice(0,8);suggestions.innerHTML=hits.map(e=>`<button type="button" data-offer-pick="${escHtml(e.name)}"><img src="${escHtml(spritePath(e))}" alt="">${escHtml(e.name)}<small>×${Number(state[e.id]||1)}</small></button>`).join('');};
+    const drawSelected=()=>{selected.innerHTML=offered.map(n=>`<button type="button" data-offer-remove="${escHtml(n)}">${escHtml(n)} ×</button>`).join('');};
+    input.oninput=draw;draw();suggestions.onclick=e=>{const b=e.target.closest('[data-offer-pick]');if(!b)return;if(!offered.includes(b.dataset.offerPick)&&offered.length<5)offered.push(b.dataset.offerPick);input.value='';draw();drawSelected();};selected.onclick=e=>{const b=e.target.closest('[data-offer-remove]');if(!b)return;const i=offered.indexOf(b.dataset.offerRemove);if(i>=0)offered.splice(i,1);drawSelected();};
+    wrap.querySelector('#sendTradeRequest').onclick=async()=>{const btn=wrap.querySelector('#sendTradeRequest');if(!offered.length){alert('Select at least one Pokémon you actually own.');return;}btn.disabled=true;const r=await window.createTradeRequestV18?.({post_id:post.id,message:wrap.querySelector('#tradeMessage').value,wanted_pokemon:post.wanted_pokemon||[],offered_pokemon:offered});if(!r?.ok){alert(r?.error||'Could not send trade request.');btn.disabled=false;return;}alert('Trade request sent!');wrap.remove();};
+  }
+  async function v2OpenCommunityNotifications(){
+    const [rows,trades]=await Promise.all([window.getCommunityNotificationsV18?.()||[],window.getTrainerTradesV28?.()||[]]);
+    const tradeMap=new Map(trades.map(t=>[String(t.id),t]));
+    const wrap=document.createElement('div');wrap.className='v2-community-modal-wrap';
+    const unread=rows.filter(n=>!n.read).length;
+    const tradeCard=n=>{const t=tradeMap.get(String(n.trainer_trade_id||''));if(!t)return '';const from=entries.find(e=>String(e.id)===String(t.from_pokemon)),to=entries.find(e=>String(e.id)===String(t.to_pokemon));return `<div class="v2-trade-notification-card"><div><span>${escHtml(t.from_trainer_name)}</span>${from?`<img src="${escHtml(spritePath(from))}" alt="">`:''}<b>${escHtml(from?.name||t.from_pokemon)}</b></div><i>⇄</i><div><span>${escHtml(t.to_trainer_name)}</span>${to?`<img src="${escHtml(spritePath(to))}" alt="">`:''}<b>${escHtml(to?.name||t.to_pokemon)}</b></div></div>`;};
+    wrap.innerHTML=`<div class="v2-community-modal v2-notifications-modal"><button class="info-close" data-close>×</button><div class="eyebrow">COMMUNITY</div><h2>Notifications ${unread?`<span class="v2-notification-count">${unread}</span>`:''}</h2><div class="v2-notification-list">${rows.length?rows.map(n=>{const isTrade=n.type==='trainer_trade_request',isDone=n.type==='trainer_trade_accepted',t=tradeMap.get(String(n.trainer_trade_id||''));return `<article class="v2-notification ${n.read?'read':'unread'}" data-notification="${escHtml(n.id)}"><div class="v2-notification-icon">${isTrade?'⇄':isDone?'✅':n.type==='trade_request'?'🤝':'🔔'}</div><div class="v2-notification-body"><b>${escHtml(n.title)}</b><p>${escHtml(n.body)}</p>${t?tradeCard(n):''}<small>${escHtml(n.created_at?new Date(n.created_at).toLocaleString([], {day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):'')}</small>${isTrade&&!n.read&&t?`<div class="v2-notification-actions"><button data-linked-trade-action="accept" data-trade-id="${escHtml(t.id)}">Confirm trade</button><button data-linked-trade-action="decline" data-trade-id="${escHtml(t.id)}">Decline</button></div>`:n.type==='trade_request'&&!n.read?`<div class="v2-notification-actions"><button data-trade-action="accepted" data-trade-id="${escHtml(n.trade_request_id||'')}">Accept</button><button data-trade-action="declined" data-trade-id="${escHtml(n.trade_request_id||'')}">Decline</button></div>`:''}</div></article>`;}).join(''):`<div class="v2-empty-feed"><strong>All clear.</strong><span>No community notifications yet.</span></div>`}</div></div>`;
+    document.body.appendChild(wrap);
+    wrap.addEventListener('click',async e=>{
+      if(e.target===wrap||e.target.closest('[data-close]')){wrap.remove();return;}
+      const n=e.target.closest('[data-notification]');
+      const linked=e.target.closest('[data-linked-trade-action]');
+      if(linked){const id=linked.dataset.tradeId,action=linked.dataset.linkedTradeAction;linked.disabled=true;const r=action==='accept'?await window.acceptTrainerTradeV28?.(id):await window.respondTrainerTradeV28?.(id,'declined');if(!r?.ok){alert(r?.error||'Could not update the trade.');linked.disabled=false;return;}if(n)await window.markCommunityNotificationReadV18?.(n.dataset.notification);if(action==='accept'){try{await window.LivingDexOnline?.reloadFromCloudV28?.();}catch{}alert('Trade confirmed! Both collections have been updated.');}n?.remove();return;}
+      if(n&&!e.target.closest('[data-trade-action]')){await window.markCommunityNotificationReadV18?.(n.dataset.notification);n.classList.remove('unread');n.classList.add('read');}
+      const action=e.target.closest('[data-trade-action]');if(action){const r=await window.respondToTradeRequestV18?.(action.dataset.tradeId,action.dataset.tradeAction);if(!r?.ok){alert(r?.error||'Could not update trade request.');return;}await window.markCommunityNotificationReadV18?.(n?.dataset.notification);action.closest('.v2-notification-actions')?.remove();}
+    });
+  }
+  let v2NotificationTimer=null;
+  async function v2RefreshNotificationBell(){
+    const b=document.querySelector('#notificationBtn');
+    const badge=document.querySelector('#notificationBadge');
+    if(!b||!badge)return;
+    if(!window.LivingDexOnline?.user||!window.getCommunityNotificationsV18){badge.hidden=true;badge.textContent='0';return;}
+    try{
+      const rows=await window.getCommunityNotificationsV18();
+      const n=rows.filter(x=>!x.read).length;
+      badge.textContent=n>9?'9+':String(n);
+      badge.hidden=n===0;
+      b.classList.toggle('has-notifications',n>0);
+      b.setAttribute('aria-label',n?`Notifications (${n} unread)`:'Notifications');
+    }catch{badge.hidden=true;badge.textContent='0';b.classList.remove('has-notifications');}
+  }
+  function v2CommunityNotificationBell(){
+    const b=document.querySelector('#notificationBtn'); if(!b)return;
+    if(!b.dataset.bound){
+      b.dataset.bound='1';
+      b.addEventListener('click',v2OpenCommunityNotifications);
+    }
+    v2RefreshNotificationBell();
+    if(!v2NotificationTimer){
+      v2NotificationTimer=setInterval(()=>{if(document.visibilityState!=='hidden')v2RefreshNotificationBell();},30000);
+    }
+  }
+
   function renderV2Activity(){v2RenderFeed();}
   function v2CommandPalette(){
     if($('#v2CommandPalette')){ $('#v2CommandPalette').hidden=false; $('#v2CommandInput')?.focus(); return; }
@@ -985,6 +1193,8 @@
   }
   window.renderV2Home=renderV2Home;
   window.v2Navigate=v2Navigate;
+  window.v2CurrentView=()=>view;
+  window.v2IconNav=v2IconNav;window.v2CurrentView=()=>view;
 
   window.renderTopNav = function(){
     const items=[['dex','LivingDex'],['daily','Catch Calendar'],['team','Team Builder'],['types','Type Knowledge'],['training','Training'],['achievements','Rewards'],['stats','Statistics'],['goals','Goals'],['activity','Activity']];
@@ -1022,7 +1232,7 @@
 
   // Boot V1.1 after the V1.0 app has loaded its data and local state.
   function boot(){
-    document.title='Cobblemon LivingDex — V2.0.17';
+    document.title='Cobblemon LivingDex — V2.0.29';
     // Expose the V1.1/V1.2 views explicitly so the database layer and navigation
     // always call the same implementations.
     window.renderTraining = renderTraining;
@@ -1047,6 +1257,7 @@
     window.renderTopNav = renderTopNav;
     window.renderView = renderView;
     addBackupControls();
+    v2CommunityNotificationBell();
     // Always boot into the LivingDex with the grid rendered immediately.
     // The V1.0 app initializes before this file loads, so explicitly render the
     // default view here as well; this prevents a blank first screen until the

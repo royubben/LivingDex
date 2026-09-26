@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Cobblemon LivingDex — V2.0.16</title>
+<title>Cobblemon LivingDex — V2.0.29</title>
 <link rel="stylesheet" href="style.css?v=2.0.16-feed">
 </head>
 <body>
@@ -18,7 +18,9 @@
     <div class="progress"><i id="progressBar"></i></div>
   </div>
   <div class="header-actions">
+    <button id="notificationBtn" class="ghost notification-btn" type="button" title="Notifications" aria-label="Notifications">🔔<i id="notificationBadge" hidden>0</i></button>
     <button id="profileBtn" class="ghost profile-btn">👤 <span>Profile</span></button>
+    <button id="accountBtn" class="ghost account-btn">↗ <span>Sign in</span></button>
     <button id="resetBtn" class="ghost">Reset collection</button>
     <div class="settings-wrap">
       <button id="settingsBtn" class="ghost settings-btn">⚙ <span id="settingsTitle">Settings</span></button>
@@ -105,9 +107,9 @@
 </aside>
 <script src="data/cobblemon_local.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="app.js?v=2.0.16-feed"></script>
-<script src="v11.js?v=2.0.16-feed"></script>
+<script src="app.js?v=2.0.28-linked-trades"></script>
+<script src="v11.js?v=2.0.28-linked-trades"></script>
 <script src="db-config.js?v=2.0.16-feed"></script>
-<script src="db.js?v=2.0.16-feed"></script>
+<script src="db.js?v=2.0.28-linked-trades"></script>
 </body>
 </html>

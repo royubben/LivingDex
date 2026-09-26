@@ -35,7 +35,7 @@
     favorites: window.favorites || {},
     notes: window.notes || {},
     team: window.team || [],
-    training: (() => { try { const t=JSON.parse(localStorage.getItem('cobblemon-livingdex-training') || '{}'); t.__journey=window.journey||JSON.parse(localStorage.getItem('cobblemon-livingdex-journey')||'{\"version\":1,\"events\":[],\"owned\":{}}'); return t; } catch { return {__journey:window.journey||{version:1,events:[],owned:{}}}; } })(),
+    training: (() => { try { const t=JSON.parse(localStorage.getItem('cobblemon-livingdex-training') || '{}'); t.__journey=window.journey||JSON.parse(localStorage.getItem('cobblemon-livingdex-journey')||'{\"version\":1,\"events\":[],\"owned\":{}}'); t.__pokemonCounts=window.pokemonCounts||JSON.parse(localStorage.getItem('cobblemon-livingdex-counts')||'{}'); return t; } catch { return {__journey:window.journey||{version:1,events:[],owned:{}}}; } })(),
     settings: { theme: localStorage.getItem('livingdex-theme') || 'dark' },
   });
 
@@ -97,7 +97,7 @@
         ['state','favorites','notes'].forEach(k=>{if(window[k]&&s[k]){Object.keys(window[k]).forEach(x=>delete window[k][x]);Object.assign(window[k],s[k]);}});
         if(Array.isArray(s.team)&&Array.isArray(window.team))window.team.splice(0,window.team.length,...s.team);
         window.invalidateCollectionStatsV17?.();
-        try{const rt={...(s.training||{})},rs=rt.__settings||{},rj=rt.__journey;delete rt.__settings;delete rt.__journey;if(rj&&window.journey){Object.keys(window.journey).forEach(k=>delete window.journey[k]);Object.assign(window.journey,rj);localStorage.setItem('cobblemon-livingdex-journey',JSON.stringify(window.journey));}localStorage.setItem('cobblemon-livingdex-training',JSON.stringify(rt));if(rs.theme)localStorage.setItem('livingdex-theme',rs.theme);window.refreshTrainingStateV17?.();}catch{}
+        try{const rt={...(s.training||{})},rs=rt.__settings||{},rj=rt.__journey;delete rt.__settings;delete rt.__journey;if(rj&&window.journey){Object.keys(window.journey).forEach(k=>delete window.journey[k]);Object.assign(window.journey,rj);localStorage.setItem('cobblemon-livingdex-journey',JSON.stringify(window.journey));}localStorage.setItem('cobblemon-livingdex-training',JSON.stringify(rt));if(rs.theme)localStorage.setItem('livingdex-theme',rs.theme);if(rt.__pokemonCounts){window.pokemonCounts=rt.__pokemonCounts;localStorage.setItem('cobblemon-livingdex-counts',JSON.stringify(rt.__pokemonCounts));}window.refreshTrainingStateV17?.();}catch{}
       }
     }else{const ok=await saveOnline();if(!ok)return false;}
     loadedUserId=currentUser.id;
@@ -144,7 +144,7 @@
     }
   }
 
-  async function logout(){if(ONLINE&&currentUser){clearTimeout(syncTimer);await saveOnline();await client.auth.signOut();}currentUser=null;loadedUserId=null;renderAccountState();}
+  async function logout(){if(ONLINE&&currentUser){clearTimeout(syncTimer);await saveOnline();await client.auth.signOut();}currentUser=null;loadedUserId=null;renderAccountState();window.v2IconNav?.(window.v2CurrentView?.()||'home');}
 
   function openProfileView(){
     try{
@@ -178,6 +178,8 @@
       window.scrollTo?.({top:0,behavior:'smooth'});
     };
     b.onclick=openProfileFromButton;
+    const accountBtn=$('#accountBtn');
+    if(accountBtn){accountBtn.innerHTML=currentUser?'↪ <span>Sign out</span>':'↗ <span>Sign in</span>';accountBtn.setAttribute('aria-label',currentUser?'Sign out':'Sign in');accountBtn.onclick=()=>currentUser?logout():authModal('login');}
     b.onpointerup=openProfileFromButton;
     b.onkeydown=(e)=>{if(e.key==='Enter'||e.key===' '){openProfileFromButton(e);}};
   }
@@ -284,46 +286,178 @@
     const publicBadges=window.getMilestoneDefinitions?.(publicStats)||[], earned=publicBadges.filter(x=>x.unlocked);
     const featured=Array.isArray(publicTraining.__profile?.featuredBadges)?publicTraining.__profile.featuredBadges:[];
     const teamArr=Array.isArray(s.team)?s.team:[];
-    const p2={...p,trainerName:p.display_name,profileMeta:publicTraining.__profile||{}};
-    const card=renderTrainerCardHtml(p2,publicStats,featured,true);
+    const meta=publicTraining.__profile||{};
+    const p2={...p,trainerName:p.display_name,profileMeta:meta,favoritePokemon:p.favorite_pokemon||meta.favoritePokemon||''};
+    const total=Number(publicStats.total||window.__getLivingDexEntries?.().length||0);
+    const caught=Number(publicStats.caught||Object.values(s.state||{}).filter(Boolean).length);
+    const xpRaw=Number(publicTraining.xp||0);
+    const xpCaught=caught*10, xpQ=pq*3, xpSessions=Number(publicTraining.__trainingSessions||0)*10, xpStreak=Number(pd.streak||0)*8;
+    const xpTotal=Math.max(0,xpCaught+xpQ+xpSessions+xpStreak+xpRaw);
+    const xp={xp:xpTotal,level:Math.floor(xpTotal/100)+1,intoLevel:xpTotal%100};
+    const allEntries=window.__getLivingDexEntries?.()||[];
+    const genMap=new Map();
+    for(const e of allEntries){if(!e?.box)continue;const g=Number(e.generation||0);if(!g)continue;const row=genMap.get(g)||{g,total:0,caught:0};row.total++;if(s.state?.[e.id])row.caught++;genMap.set(g,row);}
+    const generations=[...genMap.values()].sort((a,b)=>a.g-b.g).map(g=>({...g,pct:g.total?Math.round(g.caught/g.total*100):0}));
+    const typeMap=new Map();
+    for(const e of allEntries){if(!e?.box)continue;const caughtEntry=!!s.state?.[e.id];for(const t of (window.entryTypes?.(e)||[])){const row=typeMap.get(t)||{t,total:0,caught:0};row.total++;if(caughtEntry)row.caught++;typeMap.set(t,row);}}
+    const types=[...typeMap.values()].map(t=>({...t,p:t.total?Math.round(t.caught/t.total*100):0}));
+    const card=window.buildV2TrainerCardMarkup?.({profile:p2,meta,caught,total,xp,daily:{streak:Number(pd.streak||0),bestStreak:Number(pd.bestStreak||0)},badges:earned,featured,team:teamArr,generations,types,stats:publicStats})||renderTrainerCardHtml(p2,publicStats,featured,true);
     const teamHtml=p.show_team?`<section class="public-profile-section"><div class="section-heading"><div><span class="eyebrow">TEAM</span><h3>Public Team</h3></div><span class="section-note">${teamArr.length}/6</span></div><div class="public-team public-team-v17">${teamArr.map(id=>{const e=entryMap().get(id);return e?`<article class="public-team-card"><img loading="lazy" decoding="async" src="${window.spritePath(e)}" alt="${esc(e.name)}"><b>${esc(e.name)}</b><span>${entryTypes(e).map(typeLabel).join(' / ')}</span></article>`:`<article class="public-team-card"><b>${esc(id)}</b></article>`}).join('')||'<div class="empty-panel">No public team.</div>'}</div></section>`:'';
     const badgeHtml=earned.map(m=>`<article class="public-badge-card"><img loading="lazy" decoding="async" src="${esc(m.asset)}" alt="${esc(m.name)}"><div><b>${esc(m.name)}</b><small>${esc(m.desc)}</small></div></article>`).join('')||'<div class="empty-panel">No badges earned yet.</div>';
     const profileCaught=Object.values(s.state||{}).filter(Boolean).length;
-    openModal(`<button class="info-close" data-close>×</button><div class="public-player-modal"><div class="public-player-head"><div><span class="eyebrow">TRAINER PROFILE</span><h2>${esc(p.display_name||'Trainer')}</h2><p>${publicTraining.__profile?.ign?`IGN · ${esc(publicTraining.__profile.ign)} · `:''}Trainer since ${esc(String(p.created_at||'2026').slice(0,4))}</p></div><div class="public-player-head-stats"><span><b>${profileCaught}</b> caught</span><span><b>${Math.round((profileCaught/Math.max(1,publicStats.total||1))*100)}%</b> complete</span><span><b>🔥 ${Number(pd.streak||0)}</b> streak</span></div></div>${card}<section class="public-profile-section"><div class="section-heading"><div><span class="eyebrow">BADGES</span><h3>Earned Milestones</h3></div><span class="section-note">${earned.length} earned</span></div><div class="public-profile-badge-grid">${badgeHtml}</div></section>${teamHtml}</div>`,`online-modal-wrap player-profile-modal-wrap`);    }catch(err){openModal(`<button class="info-close" data-close>×</button><div class="online-error">Could not open this player profile: ${esc(err?.message||err||'Unknown error')}</div>`,'online-modal-wrap');}
+    openModal(`<button class="info-close" data-close>×</button><div class="public-player-modal v2-public-player-modal">${card}</div>`,`online-modal-wrap player-profile-modal-wrap`);    }catch(err){openModal(`<button class="info-close" data-close>×</button><div class="online-error">Could not open this player profile: ${esc(err?.message||err||'Unknown error')}</div>`,'online-modal-wrap');}
   }
 
   async function leaderboardPage(){
     $('#dexView').hidden=true;$('#view').hidden=false;
     $('#view').innerHTML=`<div class="page-card online-page leaderboard-page"><div class="page-title"><div><div class="eyebrow">COMMUNITY</div><h2>Leaderboard</h2><p>Collection, Daily Catch streaks and full Training runs.</p></div></div>${onlineNotice()}<div class="leaderboard-tabs"><button class="primary" data-lb="caught">Most Pokémon Caught</button><button class="secondary" data-lb="streak">Daily Catch Streak</button><button class="secondary" data-lb="best">Best Daily Catch Streak</button><button class="secondary" data-lb="training">Training Speed</button></div><div id="leaderboardList"><div class="empty-panel">Loading leaderboard…</div></div></div>`;
     if(!ONLINE)return;
-    const [lbRes,profilesRes,statsRes]=await Promise.all([
-      client.from('leaderboard').select('*').limit(100),
+    const [profilesRes,statsRes]=await Promise.all([
       client.from('profiles').select('id,display_name,dex_name,show_on_leaderboard').eq('show_profile',true).eq('show_on_leaderboard',true).limit(100),
-      client.from('player_public_stats').select('user_id,training').limit(100)
+      client.from('player_public_stats').select('user_id,state,favorites,team,training').limit(100)
     ]);
-    if(lbRes.error){$('#leaderboardList').innerHTML=`<div class="online-error">${esc(lbRes.error.message)}</div>`;return;}
+    if(profilesRes.error){$('#leaderboardList').innerHTML=`<div class="online-error">${esc(profilesRes.error.message)}</div>`;return;}
+    if(statsRes.error){$('#leaderboardList').innerHTML=`<div class="online-error">${esc(statsRes.error.message)}</div>`;return;}
     let mode='caught';
     const trainingMap=new Map((statsRes.data||[]).map(x=>[x.user_id,x.training||{}]));
     const profileMap=new Map((profilesRes.data||[]).map(x=>[x.id,x]));
+    const lbRows=(statsRes.data||[]).filter(x=>profileMap.has(x.user_id)).map(x=>{const st=x.state||{};const caught=Object.values(st).filter(v=>v===true||Number(v)>0).length;const counts=Number(Object.values(x.training?.__pokemonCounts||{}).reduce((a,v)=>a+Math.max(0,Number(v)||0),0));return {user_id:x.user_id,display_name:profileMap.get(x.user_id)?.display_name||'Trainer',caught,duplicates:counts};});
     const draw=()=>{
       if(mode==='training'){
         const rows=(profilesRes.data||[]).map(p=>{const t=trainingMap.get(p.id)||{};const best=Number(t.__bestSessionTimeMs||0);const sessions=Number(t.__trainingSessions||0);return {...p,best,sessions};}).filter(p=>p.best>0&&p.sessions>0).sort((a,b)=>a.best-b.best).slice(0,100);
         $('#leaderboardList').innerHTML=rows.map((p,i)=>`<div class="leader-row rank-${i+1} training-speed-row"><span class="leader-rank"><i>${i<3?['♛','◆','✦'][i]:'0'+String(i+1).padStart(2,'0')}</i><b>#${i+1}</b></span><span class="leader-name"><b>${esc(p.display_name||'Trainer')}</b><small>${esc((trainingMap.get(p.id)?.__profile?.ign)||'IGN not set')}</small></span><strong>${(p.best/1000).toFixed(2)}s</strong><span>best 10-question run</span></div>`).join('')||'<div class="empty-panel">No completed training runs yet.</div>';
         return;
       }
-      const sorted=[...(lbRes.data||[])].sort((a,b)=>{
-        const streakDiff=(Number(b.daily_streak)||0)-(Number(a.daily_streak)||0);
-        const bestDiff=(Number(b.best_daily_streak)||0)-(Number(a.best_daily_streak)||0);
-        const caughtDiff=(Number(b.caught_count)||0)-(Number(a.caught_count)||0);
+      const sorted=lbRows.map(p=>{const t=trainingMap.get(p.user_id)||{};const d=t.__daily||{};return {...p,daily_streak:Number(d.streak||0),best_daily_streak:Number(d.bestStreak||0),ign:t.__profile?.ign||'IGN not set'};}).sort((a,b)=>{
+        const streakDiff=b.daily_streak-a.daily_streak, bestDiff=b.best_daily_streak-a.best_daily_streak, caughtDiff=b.caught-a.caught;
         return mode==='best'?(bestDiff||streakDiff||caughtDiff):(mode==='streak'?(streakDiff||bestDiff||caughtDiff):(caughtDiff||streakDiff||bestDiff));
       });
-      $('#leaderboardList').innerHTML=sorted.map((p,i)=>{const val=mode==='best'?Number(p.best_daily_streak||0):mode==='streak'?Number(p.daily_streak||0):Number(p.caught_count||0);return `<div class="leader-row rank-${i+1}"><span class="leader-rank"><i>${i<3?['♛','◆','✦'][i]:'0'+String(i+1).padStart(2,'0')}</i><b>#${i+1}</b></span><span class="leader-name"><b>${esc(p.display_name||'Trainer')}</b><small>${esc((trainingMap.get(p.id)?.__profile?.ign)||'IGN not set')}</small></span><strong>${val}</strong><span>${mode==='best'?'best daily catch streak':mode==='streak'?'daily catch streak':'caught'}</span></div>`;}).join('')||'<div class="empty-panel">No players have opted in yet.</div>';
+      $('#leaderboardList').innerHTML=sorted.map((p,i)=>{const val=mode==='best'?p.best_daily_streak:mode==='streak'?p.daily_streak:p.caught;return `<div class="leader-row rank-${i+1}"><span class="leader-rank"><i>${i<3?['♛','◆','✦'][i]:'0'+String(i+1).padStart(2,'0')}</i><b>#${i+1}</b></span><span class="leader-name"><b>${esc(p.display_name||'Trainer')}</b><small>${esc(p.ign)}</small></span><strong>${val}</strong><span>${mode==='best'?'best daily catch streak':mode==='streak'?'daily catch streak':'caught'}</span></div>`;}).join('')||'<div class="empty-panel">No players have opted in yet.</div>';
     };
     $$('[data-lb]').forEach(b=>b.onclick=()=>{mode=b.dataset.lb;$$('[data-lb]').forEach(x=>x.className=x.dataset.lb===mode?'primary':'secondary');draw();});
     draw();
   }
 
   let globalActivityCache=null, globalActivityCacheAt=0;
+
+  let communityPostsCache=null, communityPostsCacheAt=0;
+  async function getCommunityPosts(){
+    if(!ONLINE||!client)return [];
+    const now=Date.now();
+    if(communityPostsCache&&now-communityPostsCacheAt<10000)return communityPostsCache.slice();
+    const {data,error}=await client.from('community_posts').select('id,user_id,author_name,kind,title,body,wanted_pokemon,offered_pokemon,created_at,updated_at').eq('status','open').order('created_at',{ascending:false}).limit(60);
+    if(error){console.warn('Community posts query failed',error);return [];}
+    communityPostsCache=(data||[]).map(p=>({
+      ...p, activity_id:`post:${p.id}`, trainerName:p.author_name||'Trainer', trainerId:p.user_id,
+      ts:new Date(p.created_at||Date.now()).getTime(), entryId:null, name:'',
+      wanted_pokemon:Array.isArray(p.wanted_pokemon)?p.wanted_pokemon:[], offered_pokemon:Array.isArray(p.offered_pokemon)?p.offered_pokemon:[]
+    }));
+    communityPostsCacheAt=Date.now();
+    return communityPostsCache.slice();
+  }
+  async function createCommunityPost(payload={}){
+    if(!ONLINE||!client||!currentUser)return {ok:false,error:'Sign in to create a post.'};
+    const kind=['looking_for','trainer_post'].includes(payload.kind)?payload.kind:'trainer_post';
+    const clean=(v,max)=>String(v??'').trim().slice(0,max);
+    const title=clean(payload.title,100), body=clean(payload.body,1000);
+    if(!body)return {ok:false,error:'Write something before posting.'};
+    if(kind==='looking_for'){
+      const cutoff=new Date(Date.now()-20*60*1000).toISOString();
+      const {data:recent,error:recentError}=await client.from('community_posts').select('id,created_at').eq('user_id',currentUser.id).eq('kind','looking_for').gte('created_at',cutoff).limit(1);
+      if(recentError)return {ok:false,error:`${recentError.code||'DB'}: ${recentError.message||'Could not check the Looking For cooldown.'}`};
+      if(recent?.length)return {ok:false,error:'You can create a Looking For post once every 20 minutes.'};
+    }
+    const profile=profileLocal()||{};
+    const row={user_id:currentUser.id,author_name:clean(profile.name||currentUser.user_metadata?.display_name||'Trainer',60)||'Trainer',kind,title,body,wanted_pokemon:Array.isArray(payload.wanted_pokemon)?payload.wanted_pokemon.slice(0,5):[],offered_pokemon:Array.isArray(payload.offered_pokemon)?payload.offered_pokemon.slice(0,5):[],status:'open'};
+    const {data,error}=await client.from('community_posts').insert(row).select('id').single();
+    if(error)return {ok:false,error:`${error.code||'DB'}: ${error.message||'Post failed'}`};
+    communityPostsCache=null; communityPostsCacheAt=0;
+    return {ok:true,id:data?.id};
+  }
+  async function deleteCommunityPost(id){
+    if(!ONLINE||!client||!currentUser||!id)return {ok:false,error:'Not signed in.'};
+    const {error}=await client.from('community_posts').delete().eq('id',String(id)).eq('user_id',currentUser.id);
+    if(error)return {ok:false,error:`${error.code||'DB'}: ${error.message||'Could not delete post.'}`};
+    communityPostsCache=null; communityPostsCacheAt=0;
+    return {ok:true};
+  }
+  async function createTradeRequest(payload={}){
+    if(!ONLINE||!client||!currentUser)return {ok:false,error:'Sign in to send a trade request.'};
+    const postId=String(payload.post_id||''); if(!postId)return {ok:false,error:'Missing post.'};
+    const {data:post,error:postError}=await client.from('community_posts').select('id,user_id,kind,title,body,author_name').eq('id',postId).maybeSingle();
+    if(postError||!post)return {ok:false,error:postError?.message||'Post not found.'};
+    if(post.user_id===currentUser.id)return {ok:false,error:'You cannot send a request to yourself.'};
+    const message=String(payload.message||'').trim().slice(0,500);
+    const wanted=Array.isArray(payload.wanted_pokemon)?payload.wanted_pokemon.slice(0,12):[];
+    const offered=Array.isArray(payload.offered_pokemon)?payload.offered_pokemon.slice(0,12):[];
+    const {data,error}=await client.from('community_trade_requests').insert({post_id:postId,post_owner_id:post.user_id,requester_id:currentUser.id,requester_name:profileLocal()?.name||currentUser.user_metadata?.display_name||'Trainer',message,wanted_pokemon:wanted,offered_pokemon:offered,status:'pending'}).select('id').single();
+    if(error)return {ok:false,error:`${error.code||'DB'}: ${error.message||'Trade request failed'}`};
+    await client.from('community_notifications').insert({user_id:post.user_id,type:'trade_request',actor_id:currentUser.id,actor_name:profileLocal()?.name||currentUser.user_metadata?.display_name||'Trainer',post_id:postId,trade_request_id:data?.id,title:'New trade request',body:`${profileLocal()?.name||currentUser.user_metadata?.display_name||'A Trainer'} wants to trade with you.`});
+    return {ok:true,id:data?.id};
+  }
+  async function getTradeableTrainers(){
+    if(!ONLINE||!client||!currentUser)return [];
+    const {data,error}=await client.from('profiles').select('id,display_name,show_profile,show_in_players').eq('show_profile',true).eq('show_in_players',true).neq('id',currentUser.id).order('display_name',{ascending:true}).limit(100);
+    if(error){console.warn('Trade trainer query failed',error);return [];} return data||[];
+  }
+  async function createTrainerTrade(payload={}){
+    if(!ONLINE||!client||!currentUser)return {ok:false,error:'Sign in to trade with another Trainer.'};
+    const toUser=String(payload.to_user_id||''); const fromPokemon=String(payload.from_pokemon||''); const toPokemon=String(payload.to_pokemon||'');
+    if(!toUser||!fromPokemon||!toPokemon||toUser===currentUser.id)return {ok:false,error:'Choose a Trainer and both Pokémon.'};
+    const [{data:tp,error:te},{data:me,error:meErr}]=await Promise.all([
+      client.from('profiles').select('id,display_name').eq('id',toUser).eq('show_profile',true).eq('show_in_players',true).maybeSingle(),
+      client.from('profiles').select('id,display_name').eq('id',currentUser.id).maybeSingle()
+    ]);
+    if(te||!tp)return {ok:false,error:te?.message||'Trainer not found or not visible.'};
+    if(meErr)return {ok:false,error:meErr.message||'Could not read your Trainer profile.'};
+    const fromName=me?.display_name||currentUser.user_metadata?.display_name||'Trainer', toName=tp.display_name||'Trainer';
+    const {data,error}=await client.from('trainer_trades').insert({from_user_id:currentUser.id,to_user_id:toUser,from_pokemon:fromPokemon,to_pokemon:toPokemon,from_trainer_name:fromName,to_trainer_name:toName,status:'pending'}).select('id').single();
+    if(error)return {ok:false,error:error.message||'Trade request failed.'};
+    await client.from('community_notifications').insert({user_id:toUser,type:'trainer_trade_request',actor_id:currentUser.id,actor_name:fromName,title:'New trade request',body:`${fromName} wants to trade ${fromPokemon} for ${toPokemon}.`,trainer_trade_id:data.id});
+    return {ok:true,id:data.id};
+  }
+  async function getTrainerTrades(){
+    if(!ONLINE||!client||!currentUser)return [];
+    const {data,error}=await client.from('trainer_trades').select('*').or(`from_user_id.eq.${currentUser.id},to_user_id.eq.${currentUser.id}`).order('created_at',{ascending:false}).limit(40);
+    if(error){console.warn('Trainer trades query failed',error);return [];} return data||[];
+  }
+  async function syncTrainerTradeState(){
+    if(!ONLINE||!client||!currentUser||localStorage.getItem('cobblemon-livingdex-local-dirty'))return false;
+    const {data:latest}=await client.from('trainer_trades').select('id,updated_at').or(`from_user_id.eq.${currentUser.id},to_user_id.eq.${currentUser.id}`).eq('status','accepted').order('updated_at',{ascending:false}).limit(1).maybeSingle();
+    if(!latest?.updated_at)return false;
+    const marker=localStorage.getItem('cobblemon-livingdex-last-trade-sync')||'';
+    if(marker && new Date(latest.updated_at).getTime()<=new Date(marker).getTime())return false;
+    const {data:s,error}=await client.from('player_saves').select('state,favorites,notes,team,training').eq('user_id',currentUser.id).maybeSingle();
+    if(error||!s)return false;
+    ['state','favorites','notes'].forEach(k=>{if(window[k]&&s[k]){Object.keys(window[k]).forEach(x=>delete window[k][x]);Object.assign(window[k],s[k]);}});
+    if(Array.isArray(s.team)&&Array.isArray(window.team))window.team.splice(0,window.team.length,...s.team);
+    try{const rt={...(s.training||{})};const rj=rt.__journey;delete rt.__journey;if(rj&&window.journey){Object.keys(window.journey).forEach(k=>delete window.journey[k]);Object.assign(window.journey,rj);localStorage.setItem('cobblemon-livingdex-journey',JSON.stringify(rj));}localStorage.setItem('cobblemon-livingdex-training',JSON.stringify(rt));if(rt.__pokemonCounts){window.pokemonCounts=rt.__pokemonCounts;localStorage.setItem('cobblemon-livingdex-counts',JSON.stringify(rt.__pokemonCounts));}window.refreshTrainingStateV17?.();}catch{}
+    window.invalidateCollectionStatsV17?.(); localStorage.removeItem('cobblemon-livingdex-local-dirty'); localStorage.setItem('cobblemon-livingdex-last-trade-sync',latest.updated_at); return true;
+  }
+  async function acceptTrainerTrade(id){
+    if(!ONLINE||!client||!currentUser)return {ok:false,error:'Not signed in.'};
+    const {data,error}=await client.rpc('accept_trainer_trade',{p_trade_id:id});
+    if(error)return {ok:false,error:error.message||'Could not complete the trade.'}; return data||{ok:true};
+  }
+  async function respondTrainerTrade(id,status){
+    if(!ONLINE||!client||!currentUser)return {ok:false,error:'Not signed in.'};
+    const {data,error}=await client.rpc('respond_trainer_trade',{p_trade_id:id,p_status:status});
+    if(error)return {ok:false,error:error.message||'Could not update the trade.'}; return data||{ok:true};
+  }
+  async function getCommunityNotifications(){
+    if(!ONLINE||!client||!currentUser)return [];
+    const {data,error}=await client.from('community_notifications').select('id,type,actor_id,actor_name,post_id,trade_request_id,trainer_trade_id,title,body,read,created_at').eq('user_id',currentUser.id).order('created_at',{ascending:false}).limit(40);
+    if(error){console.warn('Community notifications query failed',error);return [];} return data||[];
+  }
+  async function markCommunityNotificationRead(id){if(!ONLINE||!client||!currentUser||!id)return false;const {error}=await client.from('community_notifications').update({read:true}).eq('id',id).eq('user_id',currentUser.id);return !error;}
+  async function respondToTradeRequest(id,status){
+    if(!ONLINE||!client||!currentUser||!id)return {ok:false,error:'Not signed in.'};
+    if(!['accepted','declined'].includes(status))return {ok:false,error:'Invalid status.'};
+    const {data,error}=await client.from('community_trade_requests').update({status,updated_at:new Date().toISOString()}).eq('id',id).eq('post_owner_id',currentUser.id).eq('status','pending').select('id,requester_id,post_id').maybeSingle();
+    if(error||!data)return {ok:false,error:error?.message||'Trade request not found.'};
+    const profile=profileLocal()||{}; await client.from('community_notifications').insert({user_id:data.requester_id,type:`trade_${status}`,actor_id:currentUser.id,actor_name:profile.name||'Trainer',post_id:data.post_id,trade_request_id:data.id,title:`Trade request ${status}`,body:`${profile.name||'Trainer'} ${status} your trade request.`});
+    return {ok:true};
+  }
   async function getGlobalActivity(){
     if(!ONLINE||!client)return [];
     const now=Date.now();
@@ -374,8 +508,55 @@
       if(insertError){lastFeedReactionError=`${insertError.code||'DB'}: ${insertError.message||'Reaction insert failed'}`;console.warn('Feed reaction insert failed',insertError);return false;} return true;
     }catch(err){lastFeedReactionError=`${err?.code||'DB'}: ${err?.message||'Reaction failed'}`;console.warn('Feed reaction failed',err);return false;}
   }
-  async function postFeedComment(activityId,body){if(!ONLINE||!client||!currentUser||!activityId)return false;const text=String(body||'').trim().slice(0,280);if(!text)return false;const activity=(await getGlobalActivity()).find(a=>a.id===activityId);if(!activity||!activity.activityUserId)return false;const {error}=await client.from('activity_comments').insert({activity_id:activityId,activity_user_id:activity.activityUserId,user_id:currentUser.id,body:text});if(error){console.warn('Feed comment insert failed',error);return false;}return true;}
-  window.getFeedCommentsV17=getFeedComments;window.postFeedCommentV17=postFeedComment;window.getFeedReactionsV17=getFeedReactions;window.toggleFeedReactionV17=toggleFeedReaction;window.getLastFeedReactionErrorV17=()=>lastFeedReactionError;window.isOnlineTrainerV17=()=>!!currentUser;window.getCurrentTrainerIdV17=()=>currentUser?.id||null;
+  async function deleteFeedActivity(activityId){
+    if(!ONLINE||!client||!currentUser||!activityId)return {ok:false,error:'Not signed in.'};
+    const id=String(activityId);
+    try{
+      const {data:save,error:readError}=await client.from('player_saves').select('training').eq('user_id',currentUser.id).maybeSingle();
+      if(readError)return {ok:false,error:readError.message||'Could not load your activity.'};
+      const training={...(save?.training||{})};
+      const activity=Array.isArray(training.__activity)?training.__activity:[];
+      const next=activity.filter(a=>String(a?.id||'')!==id);
+      if(next.length===activity.length)return {ok:false,error:'Activity post not found.'};
+      training.__activity=next;
+      const {error:writeError}=await client.from('player_saves').update({training,updated_at:new Date().toISOString()}).eq('user_id',currentUser.id);
+      if(writeError)return {ok:false,error:writeError.message||'Could not delete activity.'};
+      try{
+        const raw=localStorage.getItem('cobblemon-livingdex-training')||'{}';
+        const localTraining=JSON.parse(raw)||{};
+        if(Array.isArray(localTraining.__activity)){
+          localTraining.__activity=localTraining.__activity.filter(a=>String(a?.id||'')!==id);
+          localStorage.setItem('cobblemon-livingdex-training',JSON.stringify(localTraining));
+          localStorage.setItem('cobblemon-livingdex-local-dirty',`${Date.now()}-${Math.random().toString(36).slice(2)}`);
+        }
+      }catch{}
+      await Promise.all([
+        client.from('activity_comments').delete().eq('activity_id',id),
+        client.from('activity_reactions').delete().eq('activity_id',id)
+      ]);
+      globalActivityCache=null; globalActivityCacheAt=0;
+      return {ok:true};
+    }catch(err){return {ok:false,error:err?.message||'Could not delete activity.'};}
+  }
+  async function postFeedComment(activityId,body){
+    if(!ONLINE||!client||!currentUser||!activityId)return false;
+    const text=String(body||'').trim().slice(0,280);if(!text)return false;
+    let activityUserId='';
+    if(String(activityId).startsWith('post:')){
+      const postId=String(activityId).slice(5);
+      const {data,error}=await client.from('community_posts').select('user_id').eq('id',postId).maybeSingle();
+      if(error||!data?.user_id)return false;
+      activityUserId=data.user_id;
+    }else{
+      const activity=(await getGlobalActivity()).find(a=>a.id===activityId);
+      if(!activity?.activityUserId)return false;
+      activityUserId=activity.activityUserId;
+    }
+    const {error}=await client.from('activity_comments').insert({activity_id:activityId,activity_user_id:activityUserId,user_id:currentUser.id,body:text});
+    if(error){console.warn('Feed comment insert failed',error);return false;}
+    return true;
+  }
+  window.getFeedCommentsV17=getFeedComments;window.postFeedCommentV17=postFeedComment;window.deleteFeedActivityV17=deleteFeedActivity;window.getFeedReactionsV17=getFeedReactions;window.toggleFeedReactionV17=toggleFeedReaction;window.getCommunityPostsV18=getCommunityPosts;window.createCommunityPostV18=createCommunityPost;window.createTradeRequestV18=createTradeRequest;window.getCommunityNotificationsV18=getCommunityNotifications;window.markCommunityNotificationReadV18=markCommunityNotificationRead;window.respondToTradeRequestV18=respondToTradeRequest;window.getTradeableTrainersV28=getTradeableTrainers;window.createTrainerTradeV28=createTrainerTrade;window.getTrainerTradesV28=getTrainerTrades;window.syncTrainerTradeStateV28=syncTrainerTradeState;window.acceptTrainerTradeV28=acceptTrainerTrade;window.respondTrainerTradeV28=respondTrainerTrade;window.deleteCommunityPostV18=deleteCommunityPost;window.getLastFeedReactionErrorV17=()=>lastFeedReactionError;window.isOnlineTrainerV17=()=>!!currentUser;window.getCurrentTrainerIdV17=()=>currentUser?.id||null;
 
   function installNav(){
     // V2 owns navigation when the Trainer OS layer is present. This file loads
@@ -465,13 +646,13 @@
     if(currentUser)await loadOnline();
     client.auth.onAuthStateChange((event,session)=>{
       const nextUser=session?.user||null,changed=nextUser?.id!==currentUser?.id;
-      currentUser=nextUser;renderAccountState();
+      currentUser=nextUser;renderAccountState();window.v2IconNav?.(window.v2CurrentView?.()||'home');
       if(document.querySelector('.profile-page-v13')) profilePage();
       if(currentUser&&(changed||event==='SIGNED_IN'))setTimeout(()=>loadOnline(),0);
       if(!currentUser)loadedUserId=null;
     });
   }
-  window.LivingDexOnline={get client(){return client},get user(){return currentUser},isOnline:()=>ONLINE,sync:saveOnline,queueSave,login:()=>authModal('login'),signup:()=>authModal('signup'),logout};
+  window.LivingDexOnline={get client(){return client},get user(){return currentUser},isOnline:()=>ONLINE,sync:saveOnline,queueSave,login:()=>authModal('login'),signup:()=>authModal('signup'),logout,reloadFromCloudV28:async()=>{if(localStorage.getItem('cobblemon-livingdex-local-dirty'))return false;return loadOnline();}};
   window.openProfileView=openProfileView; window.openFeaturedBadgeEditor=openFeaturedBadgeEditor; window.openPlayerProfile=(id)=>playerDetail(id);
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot); else boot();
 })();
