@@ -413,7 +413,11 @@
     const fromName=me?.display_name||currentUser.user_metadata?.display_name||'Trainer', toName=tp.display_name||'Trainer';
     const {data,error}=await client.from('trainer_trades').insert({from_user_id:currentUser.id,to_user_id:toUser,from_pokemon:fromPokemon,to_pokemon:toPokemon,from_trainer_name:fromName,to_trainer_name:toName,status:'pending'}).select('id').single();
     if(error)return {ok:false,error:error.message||'Trade request failed.'};
-    await client.from('community_notifications').insert({user_id:toUser,type:'trainer_trade_request',actor_id:currentUser.id,actor_name:fromName,title:'New trade request',body:`${fromName} wants to trade ${fromPokemon} for ${toPokemon}.`,trainer_trade_id:data.id});
+    const {error:notificationError}=await client.from('community_notifications').insert({user_id:toUser,type:'trainer_trade_request',actor_id:currentUser.id,actor_name:fromName,title:'New trade request',body:`${fromName} wants to trade ${fromPokemon} for ${toPokemon}.`,trainer_trade_id:data.id});
+    if(notificationError){
+      console.warn('Trainer trade notification insert failed',notificationError);
+      return {ok:false,error:`Trade request was created, but the notification could not be delivered: ${notificationError.message||'database policy error'}`};
+    }
     return {ok:true,id:data.id};
   }
   async function getTrainerTrades(){
