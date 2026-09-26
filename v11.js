@@ -1,6 +1,6 @@
 /* Cobblemon LivingDex V1.1 - LivingDex Plus */
 (() => {
-  const V11_VERSION = '1.7.7';
+  const V11_VERSION = '1.7.8';
   const adv = { generation:'all', type:'all', status:'all', special:'all' };
   let trainingSession = null;
   let trainingStats = JSON.parse(localStorage.getItem('cobblemon-livingdex-training') || '{}');
@@ -31,7 +31,7 @@
   const pokemonCounts = () => { try { return window.pokemonCounts ||= JSON.parse(localStorage.getItem('cobblemon-livingdex-counts') || '{}'); } catch { return (window.pokemonCounts ||= {}); } };
   const shinyCounts = () => { trainingStats.__shinies ||= {}; return trainingStats.__shinies; };
   const shinyCount = id => Math.max(0, Math.floor(Number(shinyCounts()[id] || 0)));
-  const setShinyCount = (id, count) => { const n=Math.max(0, Math.floor(Number(count)||0)); const c=shinyCounts(); if(n>0)c[id]=n; else delete c[id]; saveTraining(); };
+  const setShinyCount = (id, count) => { const old=shinyCount(id); const n=Math.max(0, Math.floor(Number(count)||0)); const c=shinyCounts(); if(n>0)c[id]=n; else delete c[id]; if(n>old) recordActivity(old===0?'shiny_caught':'shiny_added',{entryId:id,name:entryById(id)?.name||id,shiny:true,count:n}); else if(old>0&&n===0) recordActivity('shiny_uncaught',{entryId:id,name:entryById(id)?.name||id,shiny:true}); saveTraining(); };
   const shinySpritePath = e => {
     const dex=Math.max(1,Number(e?.dex||0));
     const base=`https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/shiny/${dex}.png`;
@@ -848,6 +848,9 @@
     const source=a?.sourceName||'';
     switch(a?.type){
       case 'caught': return name?`Caught ${name}`:'Caught a Pokémon';
+      case 'shiny_caught': return name?`Found a shiny ${name} ✨`:'Found a shiny Pokémon ✨';
+      case 'shiny_added': return name?`Added another shiny ${name} ✨`:'Added another shiny Pokémon ✨';
+      case 'shiny_uncaught': return name?`Removed shiny ${name} from the collection`:'Removed a shiny Pokémon from the collection';
       case 'uncaught': return name?`Removed ${name} from the collection`:'Removed a Pokémon from the collection';
       case 'favorite': return name?`Added ${name} to favorites`:'Added a favorite';
       case 'unfavorite': return name?`Removed ${name} from favorites`:'Removed a favorite';
@@ -914,7 +917,7 @@
     ];
     $('#view').innerHTML=`<div class="page-card v2-rich-page"><div class="page-title"><div><div class="eyebrow">TRAINER OBJECTIVES</div><h2>Goals</h2><p>Small goals keep your collection moving without turning the app into a grind.</p></div></div><div class="v2-goal-list">${goals.map(g=>{const p=v2Pct(g[1],g[2]);return `<article class="v2-goal"><div class="v2-goal-top"><div><b>${escHtml(g[0])}</b><small>${escHtml(String(g[3]))}</small></div><strong>${Math.min(g[1],g[2])}/${g[2]}</strong></div><div class="v2-wide-progress"><i style="width:${p}%"></i></div></article>`}).join('')}</div></div>`;
   }
-  function v2FeedIcon(a){return a?.type==='caught'?'✦':a?.type==='evolved'?'↗':a?.type==='traded'?'⇄':a?.type==='training_complete'?'⚔':a?.type?.startsWith('daily')?'★':'•';}
+  function v2FeedIcon(a){return a?.type==='caught'?'✦':a?.type?.startsWith('shiny_')?'✨':a?.type==='evolved'?'↗':a?.type==='traded'?'⇄':a?.type==='training_complete'?'⚔':a?.type?.startsWith('daily')?'★':'•';}
   function v2FeedWhen(a){return a?.ts?new Date(Number(a.ts)).toLocaleString([], {day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):(a?.date||'');}
 
   let v2FeedFilter='all';
@@ -965,12 +968,15 @@
   function v2FeedMedia(a){
     const e=v2FeedEntry(a);
     if(!e)return '';
-    return `<div class="v2-feed-pokemon-media"><div class="v2-feed-pokemon-glow"></div><img loading="lazy" decoding="async" src="${escHtml(spritePath(e))}" alt="${escHtml(e.name)}"><span>#${escHtml(String(e.num||e.id||''))}</span></div>`;
+    const src=a?.shiny?shinySpritePath(e):spritePath(e);
+    return `<div class="v2-feed-pokemon-media ${a?.shiny?'is-shiny':''}"><div class="v2-feed-pokemon-glow"></div><img loading="lazy" decoding="async" src="${escHtml(src)}" alt="${escHtml(e.name)}${a?.shiny?' shiny':''}"><span>#${escHtml(String(e.num||e.id||''))}${a?.shiny?' · ✨ SHINY':''}</span></div>`;
   }
   function v2TradeMarkup(a){
     const from=v2FeedEntry({entryId:a.sourceEntryId,name:a.sourceName}),to=v2FeedEntry({entryId:a.entryId,name:a.name});
     const leftName=a.trainerName||'Trainer',rightName=a.tradePartnerName||'Unknown Trainer';
-    return `<div class="v2-linked-trade"><div class="v2-linked-trainer"><span>${escHtml(leftName)}</span>${from?`<img loading="lazy" decoding="async" src="${escHtml(spritePath(from))}" alt="${escHtml(from.name)}">`:''}<b>${escHtml(from?.name||a.sourceName||'Pokémon')}</b></div><div class="v2-linked-arrow">⇄</div><div class="v2-linked-trainer"><span>${escHtml(rightName)}</span>${to?`<img loading="lazy" decoding="async" src="${escHtml(spritePath(to))}" alt="${escHtml(to.name)}">`:''}<b>${escHtml(to?.name||a.name||'Pokémon')}</b></div></div>`;
+    const fromSrc=from?(a.sourceShiny?shinySpritePath(from):spritePath(from)):'';
+    const toSrc=to?(a.shiny?shinySpritePath(to):spritePath(to)):'';
+    return `<div class="v2-linked-trade"><div class="v2-linked-trainer"><span>${escHtml(leftName)}</span>${from?`<img loading="lazy" decoding="async" src="${escHtml(fromSrc)}" alt="${escHtml(from.name)}${a.sourceShiny?' shiny':''}">`:''}<b>${escHtml(from?.name||a.sourceName||'Pokémon')}${a.sourceShiny?' ✨':''}</b></div><div class="v2-linked-arrow">⇄</div><div class="v2-linked-trainer"><span>${escHtml(rightName)}</span>${to?`<img loading="lazy" decoding="async" src="${escHtml(toSrc)}" alt="${escHtml(to.name)}${a.shiny?' shiny':''}">`:''}<b>${escHtml(to?.name||a.name||'Pokémon')}${a.shiny?' ✨':''}</b></div></div>`;
   }
   function v2FeedMeta(a){
     const e=v2FeedEntry(a);
@@ -1053,7 +1059,7 @@
     const tradeMap=new Map(trades.map(t=>[String(t.id),t]));
     const wrap=document.createElement('div');wrap.className='v2-community-modal-wrap';
     const unread=rows.filter(n=>!n.read).length;
-    const tradeCard=n=>{const t=tradeMap.get(String(n.trainer_trade_id||''));if(!t)return '';const from=entries.find(e=>String(e.id)===String(t.from_pokemon)),to=entries.find(e=>String(e.id)===String(t.to_pokemon));return `<div class="v2-trade-notification-card"><div><span>${escHtml(t.from_trainer_name)}</span>${from?`<img src="${escHtml(spritePath(from))}" alt="">`:''}<b>${escHtml(from?.name||t.from_pokemon)}</b></div><i>⇄</i><div><span>${escHtml(t.to_trainer_name)}</span>${to?`<img src="${escHtml(spritePath(to))}" alt="">`:''}<b>${escHtml(to?.name||t.to_pokemon)}</b></div></div>`;};
+    const tradeCard=n=>{const t=tradeMap.get(String(n.trainer_trade_id||''));if(!t)return '';const fromShiny=String(t.from_pokemon||'').startsWith('shiny:'),toShiny=String(t.to_pokemon||'').startsWith('shiny:'),fromId=fromShiny?String(t.from_pokemon).slice(6):t.from_pokemon,toId=toShiny?String(t.to_pokemon).slice(6):t.to_pokemon,from=entries.find(e=>String(e.id)===String(fromId)),to=entries.find(e=>String(e.id)===String(toId));return `<div class="v2-trade-notification-card"><div><span>${escHtml(t.from_trainer_name)}</span>${from?`<img src="${escHtml(fromShiny?shinySpritePath(from):spritePath(from))}" alt="">`:''}<b>${escHtml(from?.name||fromId)}${fromShiny?' ✨':''}</b></div><i>⇄</i><div><span>${escHtml(t.to_trainer_name)}</span>${to?`<img src="${escHtml(toShiny?shinySpritePath(to):spritePath(to))}" alt="">`:''}<b>${escHtml(to?.name||toId)}${toShiny?' ✨':''}</b></div></div>`;};
     wrap.innerHTML=`<div class="v2-community-modal v2-notifications-modal"><button class="info-close" data-close>×</button><div class="eyebrow">COMMUNITY</div><h2>Notifications ${unread?`<span class="v2-notification-count">${unread}</span>`:''}</h2><div class="v2-notification-list">${rows.length?rows.map(n=>{const isTrade=n.type==='trainer_trade_request',isDone=n.type==='trainer_trade_accepted',t=tradeMap.get(String(n.trainer_trade_id||''));return `<article class="v2-notification ${n.read?'read':'unread'}" data-notification="${escHtml(n.id)}"><div class="v2-notification-icon">${isTrade?'⇄':isDone?'✅':n.type==='trade_request'?'🤝':'🔔'}</div><div class="v2-notification-body"><b>${escHtml(n.title)}</b><p>${escHtml(n.body)}</p>${t?tradeCard(n):''}<small>${escHtml(n.created_at?new Date(n.created_at).toLocaleString([], {day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):'')}</small>${isTrade&&t&&t.status==='pending'?`<div class="v2-notification-actions"><button data-linked-trade-action="accept" data-trade-id="${escHtml(t.id)}">Confirm trade</button><button data-linked-trade-action="decline" data-trade-id="${escHtml(t.id)}">Decline</button></div>`:n.type==='trade_request'&&!n.read?`<div class="v2-notification-actions"><button data-trade-action="accepted" data-trade-id="${escHtml(n.trade_request_id||'')}">Accept</button><button data-trade-action="declined" data-trade-id="${escHtml(n.trade_request_id||'')}">Decline</button></div>`:''}</div></article>`;}).join(''):`<div class="v2-empty-feed"><strong>All clear.</strong><span>No community notifications yet.</span></div>`}</div></div>`;
     document.body.appendChild(wrap);
     const unreadRows=rows.filter(n=>!n.read);
@@ -1255,7 +1261,7 @@
 
   // Boot V1.1 after the V1.0 app has loaded its data and local state.
   function boot(){
-    document.title='Cobblemon LivingDex — V2.0.29';
+    document.title='Cobblemon LivingDex — V2.0.36';
     // Expose the V1.1/V1.2 views explicitly so the database layer and navigation
     // always call the same implementations.
     window.renderTraining = renderTraining;
@@ -1279,6 +1285,8 @@
     window.refreshTrainingStateV17=()=>{try{trainingStats=JSON.parse(localStorage.getItem('cobblemon-livingdex-training')||'{}');}catch{trainingStats={};}};
     window.getShinyCountV17=id=>shinyCount(id);
     window.getShinyCountsV17=()=>({...shinyCounts()});
+    window.setShinyCountV17=(id,count)=>setShinyCount(id,count);
+    window.getShinySpritePathV17=e=>shinySpritePath(e);
     window.renderTopNav = renderTopNav;
     window.renderView = renderView;
     addBackupControls();
