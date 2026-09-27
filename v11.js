@@ -221,8 +221,9 @@
     return ds;
   };
   const DAILY_EXCLUDED_LABELS = new Set(['legendary','mythical','ultra_beast','paradox','restricted']);
+  const DAILY_EXCLUDED_ENTRY_IDS = new Set(['gimmighoul|roaming|999|main','staryu|patrickyu|120|main','maushold|base|925|main','maushold|four|925|main','deoxys|base|386|main','deoxys|attack|386|main','deoxys|defense|386|main','deoxys|speed|386|main']);
   function isDailyEligible(e){
-    if(!e?.box) return false;
+    if(!e?.box || DAILY_EXCLUDED_ENTRY_IDS.has(e.id)) return false;
     const sp=speciesForEntry(e);
     const labels=(sp?.labels||[]).map(x=>String(x).toLowerCase());
     return !labels.some(x=>DAILY_EXCLUDED_LABELS.has(x));
