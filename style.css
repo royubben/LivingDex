@@ -3226,3 +3226,11 @@ body:has(.v2-sidebar) #dexView.v2-dex-view .pager{flex:0 0 auto;padding:3px 0 0}
 .snack-berry small{display:block;max-width:150px;color:var(--muted,#8f96a3);font-size:9px;line-height:1.35;text-align:center;margin-top:1px}
 .snack-berry b{line-height:1.2}
 @media(max-width:520px){.snack-berry small{font-size:8px;max-width:105px}}
+
+/* V2.5 — Minecraft server bridge */
+.minecraft-link-command{display:flex;align-items:center;gap:10px;margin:18px 0;padding:14px 16px;border:1px solid var(--line,#252a33);border-radius:14px;background:var(--panel,#11151b)}
+.minecraft-link-command code{flex:1;font-size:16px;font-weight:800;letter-spacing:.02em;overflow-wrap:anywhere}
+@media(max-width:520px){.minecraft-link-command{align-items:stretch;flex-direction:column}.minecraft-link-command code{font-size:14px}}
+
+.v2-evolution-media{display:flex;align-items:center;justify-content:center;gap:18px;margin:12px 0 4px;padding:14px 18px;border-radius:18px;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.08)}
+.v2-evolution-pokemon{display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:96px;gap:6px}.v2-evolution-pokemon img{width:88px;height:88px;object-fit:contain;image-rendering:auto}.v2-evolution-pokemon span{font-size:12px;font-weight:700;text-align:center}.v2-evolution-arrow{font-size:28px;font-weight:800;opacity:.65}.v2-evolution-media+.v2-feed-social-bar{margin-top:8px}

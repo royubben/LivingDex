@@ -845,10 +845,20 @@
     return {streak:Number(d.streak||0),bestStreak:Number(d.bestStreak||0),totalCompleted:Number(d.totalCompleted||0),lastCompleted:String(d.lastCompleted||'')};
   }
   function v2ActivityText(a){
-    const name=a?.name||a?.entryName||'';
-    const source=a?.sourceName||'';
+    const resolvedEntry=v2FeedEntry({
+      entryId:a?.entryId,entry_id:a?.entry_id,
+      pokemonEntryId:a?.pokemonEntryId,pokemon_entry_id:a?.pokemon_entry_id,
+      name:a?.name,entryName:a?.entryName,entry_name:a?.entry_name
+    });
+    const resolvedSource=v2FeedEntry({
+      entryId:a?.sourceEntryId,entry_id:a?.source_entry_id,
+      oldEntryId:a?.oldEntryId,old_entry_id:a?.old_entry_id,
+      name:a?.sourceName,entryName:a?.sourceName,sourceName:a?.sourceName,source_name:a?.source_name
+    });
+    const name=resolvedEntry?.name||a?.name||a?.entryName||'';
+    const source=resolvedSource?.name||a?.sourceName||'';
     switch(a?.type){
-      case 'caught': return name?`Caught ${name}`:'Caught a Pokémon';
+      case 'caught': return name?(a?.shiny?`Caught a shiny ${name} ✨`:`Caught ${name}`):(a?.shiny?'Caught a shiny Pokémon ✨':'Caught a Pokémon');
       case 'shiny_caught': return name?`Found a shiny ${name} ✨`:'Found a shiny Pokémon ✨';
       case 'shiny_added': return name?`Added another shiny ${name} ✨`:'Added another shiny Pokémon ✨';
       case 'shiny_uncaught': return name?`Removed shiny ${name} from the collection`:'Removed a shiny Pokémon from the collection';
@@ -857,7 +867,7 @@
       case 'unfavorite': return name?`Removed ${name} from favorites`:'Removed a favorite';
       case 'evolved': return source&&name?`${source} evolved into ${name}`:name?`Evolved into ${name}`:'Completed an evolution';
       case 'traded': return source&&name?`Traded ${source} for ${name}`:name?`Traded for ${name}`:'Completed a trade';
-      case 'daily_complete': return name?`Completed Catch Calendar with ${name}`:'Completed today’s Catch Calendar';
+      case 'daily_complete': return name?`Completed today’s Daily Catch by catching ${name}`:'Completed today’s Daily Catch';
       case 'daily_duplicate': return name?`Logged duplicate Catch Calendar catch: ${name}`:'Logged a duplicate Catch Calendar catch';
       case 'daily_uncomplete': return name?`Catch Calendar completion removed for ${name}`:'Catch Calendar completion removed';
       case 'training_complete': return `Training complete · ${Number(a.score||0)}/${Number(a.total||10)}`;
@@ -960,13 +970,57 @@
   }
   function v2CommunityFilters(){return `<div class="v2-community-toolbar"><button class="v2-community-create primary" id="v2CreateCommunityPost">＋ Create Post</button><div class="v2-community-filters"><button data-feed-filter="all" class="${v2FeedFilter==='all'?'active':''}">All</button><button data-feed-filter="looking_for" class="${v2FeedFilter==='looking_for'?'active':''}">🔍 Looking For</button><button data-feed-filter="trainer_post" class="${v2FeedFilter==='trainer_post'?'active':''}">📣 Posts</button><button data-feed-filter="activity" class="${v2FeedFilter==='activity'?'active':''}">⚡ Activity</button></div></div>`;}
   function v2FeedEntry(a){
-    const id=a?.entryId||'';
-    let e=entries.find(x=>String(x.id)===String(id));
-    if(!e && a?.name)e=entries.find(x=>String(x.name).toLowerCase()===String(a.name).toLowerCase());
-    if(!e && a?.entryName)e=entries.find(x=>String(x.name).toLowerCase()===String(a.entryName).toLowerCase());
-    return e||null;
+    const candidates=[
+      a?.entryId,a?.entry_id,a?.pokemonEntryId,a?.pokemon_entry_id,
+      a?.oldEntryId,a?.old_entry_id,a?.sourceEntryId,a?.source_entry_id,
+      a?.name,a?.entryName,a?.entry_name,a?.sourceName,a?.source_name
+    ].filter(v=>v!==undefined&&v!==null&&String(v).trim()!=='');
+    for(const candidate of candidates){
+      const value=String(candidate).trim();
+      const lower=value.toLowerCase();
+      let e=entries.find(x=>String(x.id).trim().toLowerCase()===lower);
+      if(!e)e=entries.find(x=>String(x.name).trim().toLowerCase()===lower);
+      if(e)return e;
+
+      // Minecraft activity created by the bridge stores technical LivingDex IDs
+      // such as "pineco|base|204|main" in name/sourceName.  Older rows can
+      // therefore bypass the normal entry lookup.  Build a safe display entry
+      // from that ID so the feed never prints the raw technical identifier.
+      if(value.includes('|')){
+        const parts=value.split('|');
+        const raw=String(parts[0]||'').trim();
+        const dex=Number(parts[2]||0)||0;
+        let slug=raw;
+        if(slug.startsWith('regional-'))slug=slug.slice(9);
+        const formPart=String(parts[1]||'').trim();
+        const regional=slug.match(/^(.*?)-(alola|galar|hisui|paldea)$/i);
+        if(regional)slug=regional[1];
+        const pretty=slug.replace(/[-_]+/g,' ').replace(/\b\w/g,m=>m.toUpperCase());
+        const fallback={id:value,dex,name:pretty,raw:slug,form:regional?regional[2]:formPart,sprite:''};
+        return fallback;
+      }
+    }
+    return null;
+  }
+  function v2EvolutionMedia(a){
+    const from=v2FeedEntry({
+      entryId:a?.sourceEntryId,entry_id:a?.source_entry_id,
+      oldEntryId:a?.oldEntryId,old_entry_id:a?.old_entry_id,
+      name:a?.sourceName,entryName:a?.sourceName
+    });
+    const to=v2FeedEntry({
+      entryId:a?.entryId,entry_id:a?.entry_id,
+      name:a?.name,entryName:a?.entryName
+    });
+    if(!from&&!to)return '';
+    const fromShiny=!!(a?.sourceShiny||a?.from_shiny);
+    const toShiny=!!(a?.shiny||a?.to_shiny);
+    const fromSrc=from?(fromShiny?shinySpritePath(from):spritePath(from)):'';
+    const toSrc=to?(toShiny?shinySpritePath(to):spritePath(to)):'';
+    return `<div class="v2-evolution-media">${from?`<div class="v2-evolution-pokemon"><img loading="lazy" decoding="async" src="${escHtml(fromSrc)}" alt="${escHtml(from.name)}${fromShiny?' shiny':''}"><span>${escHtml(from.name)}${fromShiny?' ✨':''}</span></div>`:''}<div class="v2-evolution-arrow">→</div>${to?`<div class="v2-evolution-pokemon"><img loading="lazy" decoding="async" src="${escHtml(toSrc)}" alt="${escHtml(to.name)}${toShiny?' shiny':''}"><span>${escHtml(to.name)}${toShiny?' ✨':''}</span></div>`:''}</div>`;
   }
   function v2FeedMedia(a){
+    if(a?.type==='evolved')return v2EvolutionMedia(a);
     const e=v2FeedEntry(a);
     if(!e)return '';
     const src=a?.shiny?shinySpritePath(e):spritePath(e);
@@ -1024,7 +1078,8 @@
     const rawActivityRows=(v2FeedRowsCache?.global||v2GlobalActivityRows()).filter(a=>!['team_add','team_remove'].includes(a?.type)).map(a=>({...a,__community:false,activity_id:a.id}));
     const seenLinkedTrades=new Set(); const activityRows=rawActivityRows.filter(a=>{if(a.type!=='traded'||!a.linkedTradeId)return true;const k=String(a.linkedTradeId);if(seenLinkedTrades.has(k))return false;seenLinkedTrades.add(k);return true;});
     const postRows=posts.map(a=>({...a,__community:true}));
-    let rows=[...activityRows,...postRows].filter(v2FeedFilterMatch).sort((a,b)=>Number(b.ts||0)-Number(a.ts||0)).slice(0,80);
+    let rows=[...activityRows,...postRows].filter(v2FeedFilterMatch).sort((a,b)=>Number(b.ts||0)-Number(a.ts||0));
+    rows=v2CollapseDailyCatchRows(rows).slice(0,80);
     const ids=rows.map(a=>a.activity_id||a.id).filter(Boolean);
     const comments=await v2LoadFeedComments(ids); const reactions=await v2LoadFeedReactions(ids);
     const byId=new Map();comments.forEach(c=>{const id=c.activity_id;if(!byId.has(id))byId.set(id,[]);byId.get(id).push(c);});
@@ -1156,10 +1211,34 @@
       if(document.body.dataset.v2FeedMode==='global') v2RenderHomeFeed('global');
     }catch(err){console.warn('Global activity unavailable',err);}
   }
+  function v2CollapseDailyCatchRows(rows){
+    const dailyRows=rows.filter(a=>a?.type==='daily_complete');
+    if(!dailyRows.length)return rows;
+    const sameEntry=(a,b)=>{
+      const ea=v2FeedEntry(a), eb=v2FeedEntry(b);
+      if(ea&&eb)return String(ea.id).toLowerCase()===String(eb.id).toLowerCase();
+      return String(a?.entryId||a?.entry_id||'').toLowerCase()===String(b?.entryId||b?.entry_id||'').toLowerCase();
+    };
+    const sameDay=(a,b)=>{
+      const ta=Number(a?.ts||0), tb=Number(b?.ts||0);
+      if(!ta||!tb)return String(a?.date||'')===String(b?.date||'') && String(a?.date||'')!=='';
+      return new Date(ta).toDateString()===new Date(tb).toDateString();
+    };
+    return rows.filter(a=>{
+      if(a?.type!=='caught'&&a?.type!=='daily_duplicate')return true;
+      return !dailyRows.some(d=>sameEntry(a,d)&&sameDay(a,d));
+    });
+  }
   function v2RenderHomeFeed(mode='personal'){
     const el=$('#v2HomeFeed'); if(!el)return;
     document.body.dataset.v2FeedMode=mode;
-    const rows=mode==='global'?v2GlobalActivityRows().filter(a=>!['team_add','team_remove'].includes(a?.type)):((typeof activityLog==='function'?activityLog():[]).filter(a=>a&&a.type&&!['team_add','team_remove'].includes(a.type)).slice().sort((a,b)=>Number(b.ts||0)-Number(a.ts||0)).slice(0,12));
+    let rows=[];
+    if(mode==='global'){
+      rows=v2GlobalActivityRows().filter(a=>!['team_add','team_remove'].includes(a?.type));
+    }else{
+      rows=(typeof activityLog==='function'?activityLog():[]).filter(a=>a&&a.type&&!['team_add','team_remove'].includes(a.type)).slice().sort((a,b)=>Number(b.ts||0)-Number(a.ts||0));
+    }
+    rows=v2CollapseDailyCatchRows(rows).slice(0,12);
     el.innerHTML=rows.length?rows.map(a=>`<div class="v2-feed-row"><span class="v2-feed-dot"></span><div class="v2-feed-row-main"><b>${escHtml(mode==='global'?v2GlobalActivityText(a):v2ActivityText(a))}</b><small>${escHtml(v2FeedWhen(a))}</small>${mode==='global'&&a.id?`<button class="v2-feed-comment-link" data-home-comment="${escHtml(a.id)}">Comment</button>`:''}</div></div>`).join(''):`<div class="v2-empty-feed">${mode==='global'?'No public player activity yet.':'Your Trainer activity will appear here as you play.'}</div>`;
     $$('#v2FeedPersonal,#v2FeedGlobal').forEach(b=>b.classList.toggle('active',(b.id==='v2FeedPersonal'&&mode==='personal')||(b.id==='v2FeedGlobal'&&mode==='global')));
     el.querySelectorAll('[data-home-comment]').forEach(b=>b.addEventListener('click',()=>v2Navigate('activity')));
@@ -1325,9 +1404,24 @@
     else if(view==='leaderboard')window.renderLeaderboard?.();
   };
 
+  async function showMinecraftLinkCode(){
+    if(!window.isOnlineTrainerV17?.()){alert('Sign in to your LivingDex account first.');return;}
+    const result=await window.createMinecraftLinkCodeV25?.();
+    if(!result?.ok){alert(result?.error||'Could not create a Minecraft link code.');return;}
+    const code=String(result.code||'');
+    const wrap=document.createElement('div');
+    wrap.className='online-modal-wrap';
+    wrap.innerHTML=`<div class="online-modal minecraft-link-modal"><button class="info-close" data-close>×</button><div class="eyebrow">MINECRAFT CONNECTION</div><h2>Link your Minecraft account</h2><p>Open Minecraft and run this command while the LivingDex Bridge is installed on the server:</p><div class="minecraft-link-command"><code>/livingdex link ${escHtml(code)}</code><button class="secondary" id="copyMinecraftLink">Copy</button></div><p class="settings-note">This code expires in 15 minutes and can only be used once.</p></div>`;
+    document.body.appendChild(wrap);
+    wrap.querySelector('[data-close]').onclick=()=>wrap.remove();
+    wrap.addEventListener('click',e=>{if(e.target===wrap)wrap.remove();});
+    wrap.querySelector('#copyMinecraftLink').onclick=async()=>{try{await navigator.clipboard.writeText(`/livingdex link ${code}`);wrap.querySelector('#copyMinecraftLink').textContent='Copied!';}catch{}};
+  }
+
   function addBackupControls(){
     const menu=$('#settingsMenu'); if(!menu||$('#exportSaveBtn'))return;
-    menu.insertAdjacentHTML('beforeend',`<div class="settings-divider"></div><div class="settings-heading">Save data</div><div class="settings-note">Back up your caught Pokémon, favorites, notes, profile and training stats.</div><div class="settings-save-actions"><button id="exportSaveBtn" class="secondary">Export Save</button><button id="importSaveBtn" class="secondary">Import Save</button><input id="importSaveInput" type="file" accept="application/json" hidden></div>`);
+    menu.insertAdjacentHTML('beforeend',`<div class="settings-divider"></div><div class="settings-heading">Minecraft</div><div class="settings-note">Link this Trainer to your Minecraft account. Minecraft catches, evolutions and completed trades are synced automatically from the server to your LivingDex.</div><div class="settings-save-actions"><button id="minecraftLinkBtn" class="secondary">Link Minecraft account</button></div><div class="settings-divider"></div><div class="settings-heading">Save data</div><div class="settings-note">Back up your caught Pokémon, favorites, notes, profile and training stats.</div><div class="settings-save-actions"><button id="exportSaveBtn" class="secondary">Export Save</button><button id="importSaveBtn" class="secondary">Import Save</button><input id="importSaveInput" type="file" accept="application/json" hidden></div>`);
+    $('#minecraftLinkBtn').onclick=showMinecraftLinkCode;
     $('#exportSaveBtn').onclick=()=>{const payload={version:V11_VERSION,exportedAt:new Date().toISOString(),state,favorites,notes,team,profile:JSON.parse(localStorage.getItem('cobblemon-livingdex-profile')||'null'),training:trainingStats,theme:localStorage.getItem('livingdex-theme')||'dark'};const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`${greetingName().replace(/[^A-Za-z0-9_-]+/g,'_')}_LivingDex_Save.json`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),500);};
     $('#importSaveBtn').onclick=()=>$('#importSaveInput').click();
     $('#importSaveInput').onchange=async e=>{const f=e.target.files?.[0];if(!f)return;try{const d=JSON.parse(await f.text());if(!d.state||typeof d.state!=='object')throw new Error('Invalid save');Object.keys(state).forEach(k=>delete state[k]);Object.assign(state,d.state);Object.keys(favorites).forEach(k=>delete favorites[k]);Object.assign(favorites,d.favorites||{});Object.keys(notes).forEach(k=>delete notes[k]);Object.assign(notes,d.notes||{});team.splice(0,team.length,...(d.team||[]));if(d.profile)saveProfile(d.profile);trainingStats=d.training||{};saveAll();saveTraining();alert('Save imported successfully.');location.reload();}catch(err){alert('Could not import this save file.');}};
@@ -1339,7 +1433,7 @@
 
   // Boot V1.1 after the V1.0 app has loaded its data and local state.
   function boot(){
-    document.title='Cobblemon LivingDex — V2.0.38';
+    document.title='Cobblemon LivingDex — V2.5';
     // Expose the V1.1/V1.2 views explicitly so the database layer and navigation
     // always call the same implementations.
     window.renderTraining = renderTraining;

@@ -1,4 +1,4 @@
-/* Cobblemon LivingDex V1.7.3 — trainer cards, badges, daily competition and history. */
+/* Cobblemon LivingDex V2.5 — Minecraft server sync and trainer data. */
 (() => {
   const CFG = window.LIVINGDEX_SUPABASE || {};
   const ONLINE = !!(CFG.url && CFG.key && window.supabase);
@@ -8,6 +8,7 @@
   let syncInFlight = false;
   let syncAgain = false;
   let syncRevision = 0;
+  let lastServerTradePoll = 0;
   let loadedUserId = null;
   let currentView = 'dex';
 
@@ -88,6 +89,7 @@
       localStorage.setItem('cobblemon-livingdex-profile',JSON.stringify({...lp,...p,trainerName:p.display_name,assistantName:p.dex_name}));
     }
     if(s){
+      if(s.updated_at) localStorage.setItem('cobblemon-livingdex-last-server-state-sync',s.updated_at);
       const remoteTraining=s.training||{};
       const remoteEmpty=!Object.keys(s.state||{}).length&&!Object.keys(s.favorites||{}).length&&!Object.keys(s.notes||{}).length&&!(s.team||[]).length&&!Object.keys(remoteTraining).length;
       const local=localPayload();
@@ -400,6 +402,46 @@
     const {data,error}=await client.from('profiles').select('id,display_name,show_profile,show_in_players').eq('show_profile',true).eq('show_in_players',true).neq('id',currentUser.id).order('display_name',{ascending:true}).limit(100);
     if(error){console.warn('Trade trainer query failed',error);return [];} return data||[];
   }
+
+  async function getAutoTradeCandidates(){
+    if(!ONLINE||!client||!currentUser)return [];
+    const [profilesRes,statsRes,tradesRes]=await Promise.all([
+      client.from('profiles').select('id,display_name').eq('show_profile',true).eq('show_in_players',true).neq('id',currentUser.id).limit(100),
+      client.from('player_public_stats').select('user_id,state,training').limit(100),
+      client.from('trainer_trades').select('from_user_id,to_user_id,from_pokemon,to_pokemon,status,created_at').or(`from_user_id.eq.${currentUser.id},to_user_id.eq.${currentUser.id}`).in('status',['pending','accepted']).order('created_at',{ascending:false}).limit(100)
+    ]);
+    if(profilesRes.error||statsRes.error)return [];
+    const profileMap=new Map((profilesRes.data||[]).map(x=>[x.id,x]));
+    const statsMap=new Map((statsRes.data||[]).map(x=>[x.user_id,x]));
+    const localState=window.state||{};
+    const localCounts=window.pokemonCounts||JSON.parse(localStorage.getItem('cobblemon-livingdex-counts')||'{}');
+    const ownCount=id=>Math.max(0,Number(localCounts?.[id]??(localState?.[id]?1:0))||0);
+    const publicCount=(row,id)=>Math.max(0,Number(row?.training?.__pokemonCounts?.[id]??(row?.state?.[id]?1:0))||0);
+    const recent=(tradesRes.data||[]).filter(t=>t.status==='pending'||(t.created_at&&Date.now()-new Date(t.created_at).getTime()<86400000));
+    const seen=new Set();
+    const out=[];
+    for(const [uid,profile] of profileMap){
+      const other=statsMap.get(uid); if(!other)continue;
+      const mineOffer=entries.filter(e=>ownCount(e.id)>=2);
+      const mineMissing=entries.filter(e=>ownCount(e.id)===0);
+      const otherOffer=entries.filter(e=>publicCount(other,e.id)>=2);
+      const otherMissing=entries.filter(e=>publicCount(other,e.id)===0);
+      for(const give of mineOffer){
+        if(publicCount(other,give.id)>0)continue;
+        for(const want of otherOffer){
+          if(ownCount(want.id)>0)continue;
+          const key=`${uid}|${give.id}|${want.id}`;
+          if(seen.has(key))continue;
+          const duplicate=recent.some(t=>String(t.to_user_id)===String(uid)&&String(t.from_pokemon)===String(give.id)&&String(t.to_pokemon)===String(want.id));
+          if(duplicate)continue;
+          seen.add(key);
+          out.push({to_user_id:uid,to_trainer_name:profile.display_name||'Trainer',from_pokemon:give.id,to_pokemon:want.id,from_name:give.name,to_name:want.name,reason:`You have an extra ${give.name}; ${profile.display_name||'Trainer'} has an extra ${want.name}.`});
+          if(out.length>=25)return out;
+        }
+      }
+    }
+    return out;
+  }
   async function createTrainerTrade(payload={}){
     if(!ONLINE||!client||!currentUser)return {ok:false,error:'Sign in to trade with another Trainer.'};
     const toUser=String(payload.to_user_id||''); const fromPokemon=String(payload.from_pokemon||''); const toPokemon=String(payload.to_pokemon||'');
@@ -415,24 +457,29 @@
     if(error)return {ok:false,error:error.message||'Trade request could not be created.'};
     return {ok:true,id:data?.id||data?.trade_id};
   }
+  async function createMinecraftLinkCode(){
+    if(!ONLINE||!client||!currentUser)return {ok:false,error:'Sign in first.'};
+    const {data,error}=await client.rpc('create_minecraft_link_code');
+    if(error)return {ok:false,error:error.message||'Could not create a Minecraft link code.'};
+    return data||{ok:false,error:'No link code returned.'};
+  }
   async function getTrainerTrades(){
     if(!ONLINE||!client||!currentUser)return [];
     const {data,error}=await client.from('trainer_trades').select('*').or(`from_user_id.eq.${currentUser.id},to_user_id.eq.${currentUser.id}`).order('created_at',{ascending:false}).limit(40);
     if(error){console.warn('Trainer trades query failed',error);return [];} return data||[];
   }
-  async function syncTrainerTradeState(){
+  async function syncMinecraftServerState(){
     if(!ONLINE||!client||!currentUser||localStorage.getItem('cobblemon-livingdex-local-dirty'))return false;
-    const {data:latest}=await client.from('trainer_trades').select('id,updated_at').or(`from_user_id.eq.${currentUser.id},to_user_id.eq.${currentUser.id}`).eq('status','accepted').order('updated_at',{ascending:false}).limit(1).maybeSingle();
-    if(!latest?.updated_at)return false;
-    const marker=localStorage.getItem('cobblemon-livingdex-last-trade-sync')||'';
-    if(marker && new Date(latest.updated_at).getTime()<=new Date(marker).getTime())return false;
-    const {data:s,error}=await client.from('player_saves').select('state,favorites,notes,team,training').eq('user_id',currentUser.id).maybeSingle();
-    if(error||!s)return false;
+    const {data:s,error}=await client.from('player_saves').select('state,favorites,notes,team,training,updated_at').eq('user_id',currentUser.id).maybeSingle();
+    if(error||!s?.updated_at)return false;
+    const marker=localStorage.getItem('cobblemon-livingdex-last-server-state-sync')||'';
+    if(marker && new Date(s.updated_at).getTime()<=new Date(marker).getTime())return false;
     ['state','favorites','notes'].forEach(k=>{if(window[k]&&s[k]){Object.keys(window[k]).forEach(x=>delete window[k][x]);Object.assign(window[k],s[k]);}});
     if(Array.isArray(s.team)&&Array.isArray(window.team))window.team.splice(0,window.team.length,...s.team);
     try{const rt={...(s.training||{})};const rj=rt.__journey;delete rt.__journey;if(rj&&window.journey){Object.keys(window.journey).forEach(k=>delete window.journey[k]);Object.assign(window.journey,rj);localStorage.setItem('cobblemon-livingdex-journey',JSON.stringify(rj));}localStorage.setItem('cobblemon-livingdex-training',JSON.stringify(rt));if(rt.__pokemonCounts){window.pokemonCounts=rt.__pokemonCounts;localStorage.setItem('cobblemon-livingdex-counts',JSON.stringify(rt.__pokemonCounts));}window.refreshTrainingStateV17?.();}catch{}
-    window.invalidateCollectionStatsV17?.(); localStorage.removeItem('cobblemon-livingdex-local-dirty'); localStorage.setItem('cobblemon-livingdex-last-trade-sync',latest.updated_at); return true;
+    window.invalidateCollectionStatsV17?.(); localStorage.removeItem('cobblemon-livingdex-local-dirty'); localStorage.setItem('cobblemon-livingdex-last-server-state-sync',s.updated_at); localStorage.setItem('cobblemon-livingdex-last-trade-sync',s.updated_at); return true;
   }
+  const syncTrainerTradeState=syncMinecraftServerState;
   async function acceptTrainerTrade(id){
     if(!ONLINE||!client||!currentUser)return {ok:false,error:'Not signed in.'};
     const {data,error}=await client.rpc('accept_trainer_trade',{p_trade_id:id});
@@ -555,7 +602,7 @@
     if(error){console.warn('Feed comment insert failed',error);return false;}
     return true;
   }
-  window.getFeedCommentsV17=getFeedComments;window.postFeedCommentV17=postFeedComment;window.deleteFeedActivityV17=deleteFeedActivity;window.getFeedReactionsV17=getFeedReactions;window.toggleFeedReactionV17=toggleFeedReaction;window.getCommunityPostsV18=getCommunityPosts;window.createCommunityPostV18=createCommunityPost;window.createTradeRequestV18=createTradeRequest;window.getCommunityNotificationsV18=getCommunityNotifications;window.markCommunityNotificationReadV18=markCommunityNotificationRead;window.respondToTradeRequestV18=respondToTradeRequest;window.getTradeableTrainersV28=getTradeableTrainers;window.createTrainerTradeV28=createTrainerTrade;window.getTrainerTradesV28=getTrainerTrades;window.syncTrainerTradeStateV28=syncTrainerTradeState;window.acceptTrainerTradeV28=acceptTrainerTrade;window.respondTrainerTradeV28=respondTrainerTrade;window.deleteCommunityPostV18=deleteCommunityPost;window.getLastFeedReactionErrorV17=()=>lastFeedReactionError;window.isOnlineTrainerV17=()=>!!currentUser;window.getCurrentTrainerIdV17=()=>currentUser?.id||null;
+  window.getFeedCommentsV17=getFeedComments;window.postFeedCommentV17=postFeedComment;window.deleteFeedActivityV17=deleteFeedActivity;window.getFeedReactionsV17=getFeedReactions;window.toggleFeedReactionV17=toggleFeedReaction;window.getCommunityPostsV18=getCommunityPosts;window.createCommunityPostV18=createCommunityPost;window.createTradeRequestV18=createTradeRequest;window.getCommunityNotificationsV18=getCommunityNotifications;window.markCommunityNotificationReadV18=markCommunityNotificationRead;window.respondToTradeRequestV18=respondToTradeRequest;window.getTradeableTrainersV28=getTradeableTrainers;window.getAutoTradeCandidatesV25=getAutoTradeCandidates;window.createMinecraftLinkCodeV25=createMinecraftLinkCode;window.createTrainerTradeV28=createTrainerTrade;window.getTrainerTradesV28=getTrainerTrades;window.syncTrainerTradeStateV28=syncTrainerTradeState;window.syncMinecraftServerStateV30=syncMinecraftServerState;window.acceptTrainerTradeV28=acceptTrainerTrade;window.respondTrainerTradeV28=respondTrainerTrade;window.deleteCommunityPostV18=deleteCommunityPost;window.getLastFeedReactionErrorV17=()=>lastFeedReactionError;window.isOnlineTrainerV17=()=>!!currentUser;window.getCurrentTrainerIdV17=()=>currentUser?.id||null;
 
   function installNav(){
     // V2 owns navigation when the Trainer OS layer is present. This file loads
@@ -636,7 +683,14 @@
       playerDetail(player.dataset.playerId);
     },true);
     window.__LIVINGDEX_DB_NAV_ACTIVE=true;
-    const localWatchTick=()=>{ if(document.visibilityState==='visible') watchLocalOnlineData(); };
+    const localWatchTick=async()=>{
+      if(document.visibilityState!=='visible') return;
+      watchLocalOnlineData();
+      if(currentUser && !localStorage.getItem('cobblemon-livingdex-local-dirty') && Date.now()-lastServerTradePoll>=10000){
+        lastServerTradePoll=Date.now();
+        try{ const changed=await syncTrainerTradeState(); if(changed){ window.invalidateCollectionStatsV17?.(); window.renderView?.(); } }catch{}
+      }
+    };
     localWatchTick();
     setInterval(localWatchTick,5000);
     document.addEventListener('visibilitychange',localWatchTick,{passive:true});
