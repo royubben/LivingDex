@@ -351,7 +351,7 @@ function render(){
     $('#pageInfo').textContent=`Box ${page} / ${max}`;
     $('#prev').disabled=page<=1;
     $('#next').disabled=page>=max;
-    const boxRegion=box.entries?.find(e=>e?.region)?.region||({1:'Kanto',2:'Johto',3:'Hoenn',4:'Sinnoh',5:'Unova',6:'Kalos',7:'Alola',8:'Galar',9:'Paldea'}[box.generation]||''); const regionFirstBox=(DATA.main||[]).findIndex(b=>b.generation===box.generation)+1; const regionBoxNumber=regionFirstBox>0?box.box-regionFirstBox+1:box.box; $('#boxHeading').innerHTML=`<span>Box ${box.box}</span><small>${boxRegion} ${regionBoxNumber}</small>`;
+    const boxEntry=box.entries?.find(e=>e?.region)||box.entries?.[0]||null; const boxRegion=boxEntry?.region||({1:'Kanto',2:'Johto',3:'Hoenn',4:'Sinnoh',5:'Unova',6:'Kalos',7:'Alola',8:'Galar',9:'Paldea'}[box.generation]||''); const regionFirstBox=(DATA.main||[]).findIndex(b=>b.entries?.some(e=>e?.region===boxRegion)); const regionBoxNumber=regionFirstBox>=0?box.box-(regionFirstBox+1)+1:box.box; $('#boxHeading').innerHTML=`<span>Box ${box.box}</span><small>${boxRegion} ${regionBoxNumber}</small>`;
     const dexRoot=$('#dexView'); if(dexRoot){ dexRoot.className='v2-dex-view pc-theme-'+Math.min(9,Math.max(1,Number(box.box)||1)); }
     $('#subInfo').textContent=`${box.entries?.length||0} / 30 slots · Generation ${box.generation}`;
     attachCardEvents();
@@ -371,9 +371,10 @@ function render(){
     const boxNumbers=boxes.map(Number).filter(Number.isFinite).sort((a,b)=>a-b);
     if(boxNumbers.length===1){
       const matchedBox=(DATA.main||[])[boxNumbers[0]-1];
-      const boxRegion=matchedBox?.entries?.find(e=>e?.region)?.region||({1:'Kanto',2:'Johto',3:'Hoenn',4:'Sinnoh',5:'Unova',6:'Kalos',7:'Alola',8:'Galar',9:'Paldea'}[matchedBox?.generation]||'');
-      const regionFirstBox=(DATA.main||[]).findIndex(b=>b.generation===matchedBox?.generation)+1;
-      const regionBoxNumber=regionFirstBox>0?boxNumbers[0]-regionFirstBox+1:boxNumbers[0];
+      const matchedEntry=a.find(e=>Number(e?.box)===boxNumbers[0]&&e?.region)||matchedBox?.entries?.find(e=>e?.region)||matchedBox?.entries?.[0]||null;
+      const boxRegion=matchedEntry?.region||({1:'Kanto',2:'Johto',3:'Hoenn',4:'Sinnoh',5:'Unova',6:'Kalos',7:'Alola',8:'Galar',9:'Paldea'}[matchedBox?.generation]||'');
+      const regionFirstBox=(DATA.main||[]).findIndex(b=>b.entries?.some(e=>e?.region===boxRegion));
+      const regionBoxNumber=regionFirstBox>=0?boxNumbers[0]-(regionFirstBox+1)+1:boxNumbers[0];
       $('#boxHeading').innerHTML=`<span>Box ${boxNumbers[0]}</span><small>${boxRegion} ${regionBoxNumber}</small>`;
       const dexRoot=$('#dexView');
       if(dexRoot)dexRoot.className='v2-dex-view pc-theme-'+Math.min(9,Math.max(1,boxNumbers[0]));
