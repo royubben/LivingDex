@@ -1,10 +1,15 @@
-V1.18 sprite mapping audit
-Manifest entries: 1283
-Local filename aliases generated: 0
+V3.6.6 sprite mapping audit
 
-Six Hisui-bias entries intentionally have no image in this build because the available previous files were verified byte-identical to Pikachu and were removed rather than reused.
+Sprite policy:
+- Existing local Cobblemon sprite mappings remain the primary source.
+- When no normal local Cobblemon sprite exists, the fallback uses Pokémon Showdown HOME sprites.
+- Showdown-specific slug aliases are applied for Paradox Pokémon and other species whose Showdown filenames omit hyphens.
+- Form-specific aliases are applied for Deoxys, Dudunsparce and Gimmighoul where the LivingDex identifier differs from the Showdown filename.
+- Shiny fallback uses the matching Showdown HOME shiny sprite path.
 
-Regenerated aliases: 3
-regional-bias-102-alolan -> 0102_Exeggcute_#U2014_Alolan.png
-regional-bias-104-alolan -> 0104_Cubone_#U2014_Alolan.png
-regional-bias-109-galarian -> 0109_Koffing_#U2014_Galarian.png
+Verified Showdown HOME fallback aliases include:
+Great Tusk, Scream Tail, Brute Bonnet, Flutter Mane, Slither Wing, Sandy Shocks,
+Iron Treads, Iron Bundle, Iron Hands, Iron Jugulis, Iron Moth, Iron Thorns,
+Roaring Moon, Iron Valiant, Walking Wake, Iron Leaves, Gouging Fire, Raging Bolt,
+Iron Boulder, Iron Crown, Wo-Chien, Chien-Pao, Ting-Lu, Chi-Yu,
+Deoxys Attack/Defense/Speed, Dudunsparce, and Gimmighoul Roaming.

@@ -3237,3 +3237,25 @@ body:has(.v2-sidebar) #dexView.v2-dex-view .pager{flex:0 0 auto;padding:3px 0 0}
 .collect-status{display:grid;place-items:center;width:36px;height:36px;border-radius:10px;cursor:default;opacity:.72;}
 .collect-status.collected{opacity:1;}
 .collect-status .action-pokeball{pointer-events:none;}
+/* V3.6.16: show global and regional box numbering clearly. */
+.box-heading{display:flex!important;flex-direction:column!important;align-items:center;justify-content:center;gap:1px!important;line-height:1.1}
+.box-heading>span{font-size:18px;font-weight:900}
+.box-heading>small{font-size:12px;font-weight:800;letter-spacing:.03em;color:#8f9db2}
+@media(max-width:560px){.box-heading>span{font-size:16px}.box-heading>small{font-size:11px}}
+/* v3.6.21 performance pass — keeps the existing visual design intact */
+.grid > .card, .grid > .empty-slot {
+  contain: layout paint style;
+}
+.grid > .card {
+  content-visibility: auto;
+  contain-intrinsic-size: 246px;
+}
+.sprite img {
+  content-visibility: auto;
+}
+@media (prefers-reduced-motion: reduce) {
+  .card, .progress i, .card.search-match {
+    transition: none !important;
+    animation: none !important;
+  }
+}
