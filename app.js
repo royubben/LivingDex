@@ -366,8 +366,22 @@ function render(){
   $('#empty').hidden=!!slice.length;
   $('#pageInfo').textContent=`Page ${page} / ${max}`;
   $('#prev').disabled=page<=1;$('#next').disabled=page>=max;
-  const boxes=[...new Set(slice.map(e=>e.box).filter(Boolean))];
-  if(['kanto','johto','hoenn','sinnoh','unova','kalos','alola','galar','paldea'].includes(tab)) $('#boxHeading').textContent=`Page ${page}`; else if(tab!=='main') $('#boxHeading').textContent=`Page ${page}`;
+  const boxes=[...new Set(a.map(e=>e.box).filter(Boolean))];
+  if(tab==='main'&&query&&boxes.length){
+    const boxNumbers=boxes.map(Number).filter(Number.isFinite).sort((a,b)=>a-b);
+    if(boxNumbers.length===1){
+      const matchedBox=(DATA.main||[])[boxNumbers[0]-1];
+      const boxRegion=matchedBox?.entries?.find(e=>e?.region)?.region||({1:'Kanto',2:'Johto',3:'Hoenn',4:'Sinnoh',5:'Unova',6:'Kalos',7:'Alola',8:'Galar',9:'Paldea'}[matchedBox?.generation]||'');
+      const regionFirstBox=(DATA.main||[]).findIndex(b=>b.generation===matchedBox?.generation)+1;
+      const regionBoxNumber=regionFirstBox>0?boxNumbers[0]-regionFirstBox+1:boxNumbers[0];
+      $('#boxHeading').innerHTML=`<span>Box ${boxNumbers[0]}</span><small>${boxRegion} ${regionBoxNumber}</small>`;
+      const dexRoot=$('#dexView');
+      if(dexRoot)dexRoot.className='v2-dex-view pc-theme-'+Math.min(9,Math.max(1,boxNumbers[0]));
+    }else{
+      $('#boxHeading').textContent=`Boxes ${boxNumbers.join(', ')}`;
+    }
+  }else if(['kanto','johto','hoenn','sinnoh','unova','kalos','alola','galar','paldea'].includes(tab)) $('#boxHeading').textContent=`Page ${page}`;
+  else if(tab!=='main') $('#boxHeading').textContent=`Page ${page}`;
   $('#subInfo').textContent=query&&r.matches.size?`${r.matches.size} matches`:`${a.length} results`;
   attachCardEvents();updateProgress();
 }
