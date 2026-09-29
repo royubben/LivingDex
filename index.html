@@ -115,7 +115,13 @@
     if(!el){el=document.createElement('pre');el.id='bootError';el.style.cssText='position:fixed;z-index:999999;left:16px;right:16px;bottom:16px;max-height:45vh;overflow:auto;background:#180d12;color:#ffb4b4;border:1px solid #ff5f6d;border-radius:12px;padding:16px;font:13px/1.45 monospace;white-space:pre-wrap;box-shadow:0 12px 40px #0008';document.body.appendChild(el);}
     el.textContent='LIVINGDEX BOOT ERROR\\n\\n'+msg;
   }
-  window.addEventListener('error',function(e){show((e.message||'Unknown error')+'\\n\\n'+(e.filename||'')+':'+(e.lineno||'?')+':'+(e.colno||'?'));});
+  window.addEventListener('error',function(e){
+    // Chrome reports ResizeObserver loop notifications through the global error event.
+    // They are non-fatal browser/layout diagnostics and must not mask a real boot error.
+    var msg=String(e.message||'');
+    if(msg.includes('ResizeObserver loop completed with undelivered notifications') || msg.includes('ResizeObserver loop limit exceeded')) return;
+    show(msg+'\\n\\n'+(e.filename||'')+':'+(e.lineno||'?')+':'+(e.colno||'?'));
+  });
   window.addEventListener('unhandledrejection',function(e){show('Unhandled promise rejection\\n\\n'+(e.reason?.stack||e.reason||'Unknown rejection'));});
 })();
 </script>
