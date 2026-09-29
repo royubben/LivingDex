@@ -3,11 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Cobblemon LivingDex — V3.6.90</title>
+<title>Cobblemon LivingDex — V3.6.67</title>
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
 <link rel="preconnect" href="https://raw.githubusercontent.com" crossorigin>
 <link rel="preconnect" href="https://pokeapi.co" crossorigin>
-<link rel="stylesheet" href="style.css?v=3.6.90">
+<link rel="stylesheet" href="style.css?v=3.6.67">
 </head>
 <body>
 <header class="topbar v2-topbar">
@@ -126,33 +126,18 @@
 })();
 </script>
 <script defer src="data/cobblemon_local.js"></script>
-<script defer src="data/server_obtainability.js?v=3.6.90"></script>
-<script defer src="embedded.js?v=3.6.90"></script>
-<script defer src="app.js?v=3.6.90"></script>
-<script defer src="db-config.js?v=3.6.90"></script>
-<script>
-(function(){
-  function loadV11(){
-    if(document.querySelector('script[data-livingdex-v11]')) return;
-    var s=document.createElement('script');
-    s.src='v11.js?v=3.6.90';
-    s.dataset.livingdexV11='1';
-    document.head.appendChild(s);
-  }
-  if(document.readyState==='loading'){
-    document.addEventListener('DOMContentLoaded',loadV11,{once:true});
-  }else{
-    loadV11();
-  }
-})();
-</script>
+<script defer src="data/server_obtainability.js?v=3.6.67"></script>
+<script defer src="embedded.js?v=3.6.67"></script>
+<script defer src="app.js?v=3.6.67"></script>
+<script defer src="v11.js?v=3.6.67"></script>
+<script defer src="db-config.js?v=3.6.67"></script>
 <script>
 (function(){
   // Never let the external Supabase CDN block the LivingDex UI. The Dex must boot offline/with blocked third-party CDNs.
   function loadDb(){
     if(document.querySelector('script[data-livingdex-db]')) return;
     var s=document.createElement('script');
-    s.src='db.js?v=3.6.90';
+    s.src='db.js?v=3.6.67';
     s.dataset.livingdexDb='1';
     s.defer=true;
     document.head.appendChild(s);
@@ -167,6 +152,6 @@
   setTimeout(loadDb,7000);
 })();
 </script>
-<script>if("serviceWorker" in navigator){window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js?v=3.6.90",{scope:"./"}).catch(()=>{}));}</script>
+<script>if("serviceWorker" in navigator){window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js",{scope:"./"}).catch(()=>{}));}</script>
 </body>
 </html>
