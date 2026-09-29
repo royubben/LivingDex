@@ -15,6 +15,40 @@
     if (Number(shinies[oldId]||0)>Number(shinies[newId]||0)) shinies[newId]=Number(shinies[oldId]);
   }
 
+  // v3.6.63: special-form tabs were consolidated into the main LivingDex.
+  // Preserve existing catches/favorites/counts/shinies while the old IDs disappear.
+  const V363_FORM_ALIASES = {
+    'zygarde-10|base|718|forms':'zygarde-50|base|718|main',
+    'zygarde-50|base|718|forms':'zygarde-50|base|718|main',
+    'zygarde-complete|base|718|forms':'zygarde-50|base|718|main',
+    'tauros-paldea-combat-breed|base|128|forms':'regional-tauros-paldea-combat|paldea|128',
+    'tauros-paldea-blaze-breed|base|128|forms':'regional-tauros-paldea-blaze|paldea|128',
+    'tauros-paldea-aqua-breed|base|128|forms':'regional-tauros-paldea-aqua|paldea|128',
+    'deerling-autumn|base|585|forms':'deerling|autumn|585|main',
+    'deerling-summer|base|585|forms':'deerling|summer|585|main',
+    'deerling-winter|base|585|forms':'deerling|winter|585|main',
+    'sawsbuck-autumn|base|586|forms':'sawsbuck|autumn|586|main',
+    'sawsbuck-summer|base|586|forms':'sawsbuck|summer|586|main',
+    'sawsbuck-winter|base|586|forms':'sawsbuck|winter|586|main'
+  };
+  const V363_PREFIX_ALIASES = [
+    ['alcremie-', 'alcremie|base|869|main'],
+    ['arceus-', 'arceus|base|493|main'],
+    ['silvally-', 'silvally|base|773|main']
+  ];
+  const migrateFormState = (oldId,newId) => {
+    if(oldId===newId)return;
+    if(state[oldId]&&!state[newId])state[newId]=state[oldId];
+    if(favorites[oldId]&&!favorites[newId])favorites[newId]=favorites[oldId];
+    const counts=window.pokemonCounts ||= JSON.parse(localStorage.getItem('cobblemon-livingdex-counts') || '{}');
+    if(Number(counts[oldId]||0)>Number(counts[newId]||0))counts[newId]=Number(counts[oldId]);
+    const shinies=trainingStats.__shinies ||= {};
+    if(Number(shinies[oldId]||0)>Number(shinies[newId]||0))shinies[newId]=Number(shinies[oldId]);
+  };
+  for(const [oldId,newId] of Object.entries(V363_FORM_ALIASES))migrateFormState(oldId,newId);
+  for(const oldId of Object.keys(state)) for(const [prefix,newId] of V363_PREFIX_ALIASES) if(oldId.startsWith(prefix)) migrateFormState(oldId,newId);
+  for(const oldId of Object.keys(favorites)) for(const [prefix,newId] of V363_PREFIX_ALIASES) if(oldId.startsWith(prefix)) migrateFormState(oldId,newId);
+
 
   const saveTraining = (notifyCloud=true) => { localStorage.setItem('cobblemon-livingdex-training', JSON.stringify(trainingStats)); if(notifyCloud){ try { window.LivingDexOnline?.queueSave?.(); } catch {} } };
   const dailyDateKey = (d=new Date()) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
