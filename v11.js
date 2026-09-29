@@ -233,7 +233,7 @@
     return ds;
   };
   const DAILY_EXCLUDED_LABELS = new Set(['legendary','mythical','ultra_beast','paradox','restricted']);
-  const DAILY_EXCLUDED_ENTRY_IDS = new Set(["gimmighoul|roaming|999|main","staryu|patrickyu|120|main","maushold|base|925|main","maushold|four|925|main","deoxys|base|386|main","deoxys|attack|386|main","deoxys|defense|386|main","deoxys|speed|386|main","burmy|sandy|412|main","burmy|trash|412|main","wormadam|sandy|413|main","wormadam|trash|413|main","cherrim|sunshine|421|main","shellos|east|422|main","gastrodon|east|423|main","mime-jr|galarbias|439|main","rotom|heat|479|main","rotom|wash|479|main","rotom|frost|479|main","rotom|fan|479|main","rotom|mow|479|main","basculin|blue-striped|550|main","basculin|white-striped|550|main","darmanitan|galar|555|main","deerling|summer|585|main","deerling|autumn|585|main","deerling|winter|585|main","sawsbuck|summer|586|main","sawsbuck|autumn|586|main","sawsbuck|winter|586|main","flabebe|blue|669|main","flabebe|orange|669|main","flabebe|white|669|main","flabebe|yellow|669|main","flabebe|blue|669|special","flabebe|orange|669|special","flabebe|white|669|special","flabebe|yellow|669|special","floette|blue|670|special","floette|orange|670|special","floette|white|670|special","floette|yellow|670|special","florges|blue|671|special","florges|orange|671|special","florges|white|671|special","florges|yellow|671|special","meowstic|female|678|main","oricorio|pom-pom|741|main","oricorio|pau|741|main","oricorio|sensu|741|main","rockruff|dusk|744|main","lycanroc|midnight|745|main","lycanroc|dusk|745|main"]);
+  const DAILY_EXCLUDED_ENTRY_IDS = new Set(["pumpkaboo-small|base|710|special","pumpkaboo-large|base|710|special","pumpkaboo-super|base|710|special","gimmighoul|roaming|999|main","staryu|patrickyu|120|main","maushold|base|925|main","maushold|four|925|main","deoxys|base|386|main","deoxys|attack|386|main","deoxys|defense|386|main","deoxys|speed|386|main","burmy|sandy|412|main","burmy|trash|412|main","wormadam|sandy|413|main","wormadam|trash|413|main","cherrim|sunshine|421|main","shellos|east|422|main","gastrodon|east|423|main","mime-jr|galarbias|439|main","rotom|heat|479|main","rotom|wash|479|main","rotom|frost|479|main","rotom|fan|479|main","rotom|mow|479|main","basculin|blue-striped|550|main","basculin|white-striped|550|main","darmanitan|galar|555|main","deerling|summer|585|main","deerling|autumn|585|main","deerling|winter|585|main","sawsbuck|summer|586|main","sawsbuck|autumn|586|main","sawsbuck|winter|586|main","flabebe|blue|669|main","flabebe|orange|669|main","flabebe|white|669|main","flabebe|yellow|669|main","flabebe|blue|669|special","flabebe|orange|669|special","flabebe|white|669|special","flabebe|yellow|669|special","floette|blue|670|special","floette|orange|670|special","floette|white|670|special","floette|yellow|670|special","florges|blue|671|special","florges|orange|671|special","florges|white|671|special","florges|yellow|671|special","meowstic|female|678|main","oricorio|pom-pom|741|main","oricorio|pau|741|main","oricorio|sensu|741|main","rockruff|dusk|744|main","lycanroc|midnight|745|main","lycanroc|dusk|745|main"]);
   function isDailyEligible(e){
     if(!e?.box || DAILY_EXCLUDED_ENTRY_IDS.has(e.id)) return false;
     const sp=speciesForEntry(e);
@@ -1104,7 +1104,34 @@ function dailyFrozenEntryForDate(key){
     const now=Date.now();
     let posts;
     if(v2FeedRowsCache&&now-v2FeedRowsCacheAt<10000){ posts=v2FeedRowsCache.posts; }
-    else { const [_,loadedPosts]=await Promise.all([v2LoadGlobalActivity(),v2LoadCommunityPosts()]); posts=loadedPosts; v2FeedRowsCache={posts}; v2FeedRowsCacheAt=Date.now(); }
+    else {
+      // Feed rendering must never depend on Community Posts or any secondary
+      // Supabase query. The public activity RPC is the primary Feed source.
+      // A slow/hung community query used to prevent the entire Feed from
+      // rendering at all.
+      // The primary RPC is also time-bounded. A stalled network request must
+      // never make the Feed navigation appear broken.
+      try{
+        await Promise.race([
+          v2LoadGlobalActivity(),
+          new Promise(resolve=>setTimeout(resolve,5500))
+        ]);
+      }catch(err){console.warn('Global activity unavailable:',err);}
+      posts=[];
+      v2FeedRowsCache={posts,global:v2GlobalActivityRows()};
+      v2FeedRowsCacheAt=Date.now();
+      // Community posts are optional and must never block the Feed.
+      try{
+        const loadedPosts=await Promise.race([
+          v2LoadCommunityPosts(),
+          new Promise(resolve=>setTimeout(()=>resolve([]),2500))
+        ]);
+        posts=Array.isArray(loadedPosts)?loadedPosts:[];
+        v2FeedRowsCache.posts=posts;
+      }catch(err){
+        console.warn('Community posts unavailable:',err);
+      }
+    }
     if(!posts) posts=[];
     if(v2FeedRowsCache && !v2FeedRowsCache.global) v2FeedRowsCache.global=v2GlobalActivityRows();
     const rawActivityRows=(v2FeedRowsCache?.global||v2GlobalActivityRows()).filter(a=>!['team_add','team_remove'].includes(a?.type)).map(a=>({...a,__community:false,activity_id:a.id}));
@@ -1520,7 +1547,7 @@ function dailyFrozenEntryForDate(key){
     // The V1.0 app initializes before this file loads, so explicitly render the
     // default view here as well; this prevents a blank first screen until the
     // LivingDex button is clicked.
-    view='home';
+    view='dex';
     renderTopNav();
     renderView();
     const v2n=document.querySelector('#v2TrainerName'); if(v2n)v2n.textContent=v2Name();
