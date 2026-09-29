@@ -1,6 +1,6 @@
 /* Cobblemon LivingDex V1.1 - LivingDex Plus */
 (() => {
-  const V11_VERSION = '1.7.18';
+  const V11_VERSION = '1.7.19';
   // App-state bridge: prefer app.js bindings, but safely recover if app.js was interrupted before its bridge initialized.
   const state=window.state ?? JSON.parse(localStorage.getItem('cobblemon-livingdex-state')||'{}');
   const favorites=window.favorites ?? JSON.parse(localStorage.getItem('cobblemon-livingdex-favorites')||'{}');
