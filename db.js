@@ -15,7 +15,6 @@
   if (ONLINE) client = window.supabase.createClient(CFG.url, CFG.key, { auth: { persistSession: true, autoRefreshToken: true } });
 
   const $ = (s) => document.querySelector(s);
-  const queryAll = (s) => document.querySelectorAll(s);
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const pct = (a,b) => b ? Math.round(Number(a||0) / Number(b) * 100) : 0;
   let entryMapCache=null;
@@ -374,7 +373,7 @@
       });
       $('#leaderboardList').innerHTML=sorted.map((p,i)=>{const val=mode==='best'?p.best_daily_streak:mode==='streak'?p.daily_streak:p.caught;return `<div class="leader-row rank-${i+1}"><span class="leader-rank"><i>${i<3?['♛','◆','✦'][i]:'0'+String(i+1).padStart(2,'0')}</i><b>#${i+1}</b></span><span class="leader-name"><b>${esc(p.display_name||'Trainer')}</b><small>${esc(p.ign)}</small></span><strong>${val}</strong><span>${mode==='best'?'best daily catch streak':mode==='streak'?'daily catch streak':'caught'}</span></div>`;}).join('')||'<div class="empty-panel">No players have opted in yet.</div>';
     };
-    queryAll('[data-lb]').forEach(b=>b.onclick=()=>{mode=b.dataset.lb;queryAll('[data-lb]').forEach(x=>x.className=x.dataset.lb===mode?'primary':'secondary');draw();});
+    $$('[data-lb]').forEach(b=>b.onclick=()=>{mode=b.dataset.lb;$$('[data-lb]').forEach(x=>x.className=x.dataset.lb===mode?'primary':'secondary');draw();});
     draw();
   }
 
@@ -701,7 +700,7 @@
     window.renderTopNav=()=>{
       const items=[['dex','LivingDex'],['daily','Catch Calendar'],['team','Team Builder'],['types','Type Knowledge'],['training','Training'],['achievements','Progress'],['milestones','Milestones'],['players','Players'],['leaderboard','Leaderboard']];
       $('#topNav').innerHTML=items.map(([k,n])=>`<button class="top-nav-btn ${currentView===k?'active':''}" data-view="${k}">${n}</button>`).join('');
-      queryAll('.top-nav-btn').forEach(b=>b.onclick=async()=>{
+      $$('.top-nav-btn').forEach(b=>b.onclick=async()=>{
         window.closeInfo?.();
         currentView=b.dataset.view;
         window.renderTopNav();
@@ -727,12 +726,6 @@
   }
 
   async function boot(){
-    // db.js is loaded dynamically and can arrive before deferred app.js. Wait until
-    // the core Dex renderer is available instead of booting against an incomplete UI.
-    if(typeof window.renderDex!=='function' || typeof window.render!=='function'){
-      setTimeout(boot,25);
-      return;
-    }
     document.title='Cobblemon LivingDex — V1.7.7';
     // Install the local UI before any network request so Progress and the rest
     // of the application are immediately available even if auth is slow.
