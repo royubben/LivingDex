@@ -1,6 +1,6 @@
 /* Cobblemon LivingDex V1.1 - LivingDex Plus */
 (() => {
-  const V11_VERSION = '1.7.12';
+  const V11_VERSION = '1.7.14';
   const adv = { generation:'all', type:'all', status:'all', special:'all' };
   let trainingSession = null;
   let trainingStats = JSON.parse(localStorage.getItem('cobblemon-livingdex-training') || '{}');
@@ -59,6 +59,8 @@
     'gourgeist-small|base|711|special':'gourgeist-small|base|711|main','gourgeist-large|base|711|special':'gourgeist-large|base|711|main','gourgeist-super|base|711|special':'gourgeist-super|base|711|main'
   };
   for(const [oldId,newId] of Object.entries(V365_FORM_ALIASES)) migrateFormState(oldId,newId);
+  const V366_FORM_ALIASES = {'regional-bias-pichu-alola':'pichu|base|172|main','regional-bias-petilil-hisui':'petilil|base|548|main','regional-bias-goomy-hisui':'goomy|base|704|main','rockruff|dusk|744|main':'rockruff|base|744|main','minior-red-meteor|base|774|main':'minior|base|774|main'};
+  for(const [oldId,newId] of Object.entries(V366_FORM_ALIASES)) migrateFormState(oldId,newId);
 
 
   const saveTraining = (notifyCloud=true) => { localStorage.setItem('cobblemon-livingdex-training', JSON.stringify(trainingStats)); if(notifyCloud){ try { window.LivingDexOnline?.queueSave?.(); } catch {} } };
