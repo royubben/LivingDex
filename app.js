@@ -45,9 +45,9 @@ const team=JSON.parse(localStorage.getItem('cobblemon-livingdex-team')||'[]');
 Object.defineProperties(window,{state:{configurable:true,get:()=>state},favorites:{configurable:true,get:()=>favorites},notes:{configurable:true,get:()=>notes},team:{configurable:true,get:()=>team},entries:{configurable:true,get:()=>entries},DATA:{configurable:true,get:()=>DATA}});
 Object.keys(state).forEach(k=>{const n=Number(state[k]);state[k]=Number.isFinite(n)&&n>0?n:1;});
 function pokemonOwnedCount(id){return Math.max(0,Number(state[id]||0));}
-const favorites=JSON.parse(localStorage.getItem('cobblemon-livingdex-favorites')||'{}');
-const notes=JSON.parse(localStorage.getItem('cobblemon-livingdex-notes')||'{}');
-const team=JSON.parse(localStorage.getItem('cobblemon-livingdex-team')||'[]');
+
+
+
 const journey=JSON.parse(localStorage.getItem('cobblemon-livingdex-journey')||'{"version":1,"events":[],"owned":{}}');
 journey.version=1; journey.events=Array.isArray(journey.events)?journey.events:[]; journey.owned=journey.owned&&typeof journey.owned==='object'?journey.owned:{};
 const journeySave=()=>localStorage.setItem('cobblemon-livingdex-journey',JSON.stringify(journey));
