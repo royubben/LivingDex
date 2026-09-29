@@ -1144,7 +1144,7 @@ function dailyFrozenEntryForDate(key){
     const renderFeed=({comments=[],reactions=new Map()}={})=>{
       const byId=new Map();
       comments.forEach(c=>{const id=c.activity_id;if(!byId.has(id))byId.set(id,[]);byId.get(id).push(c);});
-      const html=rows.length?rows.map(a=>{
+      const html=rows.length?rows.map(a=>{try{
         const id=a.activity_id||a.id, cs=byId.get(id)||[];
         if(a.__community)return v2CommunityPostMarkup(a,cs,reactions);
         const text=v2GlobalActivityText(a), e=v2FeedEntry(a), media=v2FeedMedia(a), reactionData=reactions.get(id)||{counts:{},mine:''};
@@ -1152,7 +1152,7 @@ function dailyFrozenEntryForDate(key){
         const ownActivity=a.activityUserId===window.getCurrentTrainerIdV17?.();
         const deleteActivity=ownActivity?`<button type="button" class="v2-feed-delete" data-delete-activity="${escHtml(id)}" title="Delete post">Delete</button>`:'';
         return `<article class="v2-feed-post v2-social-post"><div class="v2-feed-post-top"><div class="v2-feed-author"><div class="v2-feed-avatar">${escHtml(String(a.trainerName||'Trainer').slice(0,1).toUpperCase())}</div><div><b>${a.type==='traded'?escHtml(a.trainerName||'Trainer')+' & '+escHtml(a.tradePartnerName||'Unknown Trainer'):escHtml(a.trainerName||'Trainer')}</b><small>${escHtml(v2FeedWhen(a))}</small></div></div><div class="v2-feed-post-head-actions"><span class="v2-feed-action-pill">${actionLabel}</span>${deleteActivity}</div></div><div class="v2-feed-copy"><strong>${a.type==='traded'?escHtml((a.trainerName||'Trainer')+' and '+(a.tradePartnerName||'Unknown Trainer')+' just had a trade.'):escHtml(text)}</strong>${a.type==='traded'?v2TradeMarkup(a):e?`<div class="v2-feed-pokemon-meta">${v2FeedMeta(a)}</div>`:''}</div>${a.type==='traded'?'':media}<div class="v2-feed-social-bar">${v2ReactionMarkup({id},reactionData)}<span class="v2-feed-comment-count">${cs.length} comments</span></div>${id?v2CommentMarkup({id},cs):''}</article>`;
-      }).join(''):`<div class="v2-empty-feed"><strong>No posts here yet.</strong><span>Be the first Trainer to start the conversation.</span></div>`;
+      }catch(err){console.warn('Feed row render failed:',a,err);const id=a?.activity_id||a?.id||'';const trainer=escHtml(a?.trainerName||'Trainer');const action=escHtml(v2ActivityText(a));return `<article class="v2-feed-post v2-social-post"><div class="v2-feed-post-top"><div class="v2-feed-author"><div class="v2-feed-avatar">${escHtml(String(a?.trainerName||'T').slice(0,1).toUpperCase())}</div><div><b>${trainer}</b><small>${escHtml(v2FeedWhen(a))}</small></div></div><span class="v2-feed-action-pill">ACTIVITY</span></div><div class="v2-feed-copy"><strong>${action}</strong></div></article>`;}}).join(''):`<div class="v2-empty-feed"><strong>No posts here yet.</strong><span>Be the first Trainer to start the conversation.</span></div>`;
       $('#view').innerHTML=`<div class="page-card v2-rich-page v2-feed-page"><div class="v2-feed-hero"><div><div class="eyebrow">TRAINER COMMUNITY</div><h2>Feed</h2><p>Trade, find Pokémon, share discoveries and connect with other Trainers.</p></div><div class="v2-feed-hero-mark">✦<span>LIVE COMMUNITY</span></div></div>${v2CommunityFilters()}<div class="v2-feed-list">${html}</div></div>`;
       $('#v2CreateCommunityPost')?.addEventListener('click',v2CommunityPostComposer);
       $$('[data-feed-filter]').forEach(b=>b.onclick=()=>{v2FeedFilter=b.dataset.feedFilter;v2RenderFeed();});
