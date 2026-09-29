@@ -19,6 +19,8 @@
   const queryAll=s=>[...document.querySelectorAll(s)];
   // V11-local profile helper: greetingName is lexical inside app.js and is not visible here.
   const greetingName=()=>JSON.parse(localStorage.getItem('cobblemon-livingdex-profile')||'null')?.trainerName||'Trainer';
+// V11-local UI helper: closeInfo is lexical inside app.js and is not visible here.
+const closeInfo=()=>{const el=$('#infoDropdown');if(el)el.hidden=true;const overlay=$('#infoOverlay');if(overlay)overlay.hidden=true;document.body.classList.remove('modal-open');};
   const adv = { generation:'all', type:'all', status:'all', special:'all' };
   let trainingSession = null;
   let trainingStats = JSON.parse(localStorage.getItem('cobblemon-livingdex-training') || '{}');
