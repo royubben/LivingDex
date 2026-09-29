@@ -1576,7 +1576,7 @@ function dailyFrozenEntryForDate(key){
   };
   window.renderView = function(){
     if(view==='home'){renderV2Home();return;}
-    if(view==='dex'){renderDex();return;}
+    if(view==='dex'){window.renderDex();return;}
     if(view==='pokesnack'){$('#dexView').hidden=true;$('#view').hidden=false;renderPokeSnackMaker();return;}
     $('#dexView').hidden=true;$('#view').hidden=false;
     if(view==='team')renderTeam();
