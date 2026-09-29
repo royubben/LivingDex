@@ -6,8 +6,8 @@
   const favorites=window.favorites ?? JSON.parse(localStorage.getItem('cobblemon-livingdex-favorites')||'{}');
   const notes=window.notes ?? JSON.parse(localStorage.getItem('cobblemon-livingdex-notes')||'{}');
   const team=window.team ?? JSON.parse(localStorage.getItem('cobblemon-livingdex-team')||'[]');
-  const entries=window.entries ?? [];
   const DATA=window.DATA ?? window.EMBEDDED_DATA ?? {main:[],special:[]};
+  const entries=window.entries ?? [...(DATA.main||[]),...(DATA.special||[])].flatMap(b=>b.entries||[]);
   if(!window.state) Object.defineProperty(window,'state',{configurable:true,get:()=>state});
   if(!window.favorites) Object.defineProperty(window,'favorites',{configurable:true,get:()=>favorites});
   if(!window.notes) Object.defineProperty(window,'notes',{configurable:true,get:()=>notes});
