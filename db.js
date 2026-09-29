@@ -73,42 +73,14 @@
 
   async function refreshSession(){ if(!ONLINE) return; const {data}=await client.auth.getSession(); currentUser=data?.session?.user||null; }
 
-  function mergeById(a=[], b=[]){
-    const out=new Map();
-    for(const item of [...(a||[]),...(b||[])]){ if(!item||!item.id) continue; out.set(String(item.id),item); }
-    return [...out.values()].sort((x,y)=>Number(x.ts||0)-Number(y.ts||0));
-  }
-  function mergeTrainingData(remote={}, local={}){
-    const out={...(remote||{}),...(local||{})};
-    const ra=Array.isArray(remote?.__activity)?remote.__activity:[];
-    const la=Array.isArray(local?.__activity)?local.__activity:[];
-    out.__activity=mergeById(ra,la).slice(-1000);
-    const rj=remote?.__journey&&typeof remote.__journey==='object'?remote.__journey:{};
-    const lj=local?.__journey&&typeof local.__journey==='object'?local.__journey:{};
-    out.__journey={...(rj||{}),...(lj||{})};
-    out.__journey.events=mergeById(rj.events||[],lj.events||[]).slice(-2000);
-    out.__journey.owned={...(rj.owned||{}),...(lj.owned||{})};
-    for(const key of ['__pokemonCounts','__shinies']){
-      const r=remote?.[key]&&typeof remote[key]==='object'?remote[key]:{};
-      const l=local?.[key]&&typeof local[key]==='object'?local[key]:{};
-      const m={...r};
-      for(const [id,val] of Object.entries(l)) m[id]=Math.max(Number(m[id]||0),Number(val||0));
-      out[key]=m;
-    }
-    return out;
-  }
-  function mergeStateData(remote={}, local={}){
-    const out={...(remote||{})};
-    for(const [id,val] of Object.entries(local||{})){
-      if(typeof val==='number') out[id]=Math.max(Number(out[id]||0),Number(val||0));
-      else if(val===true) out[id]=true;
-      else if(out[id]==null) out[id]=val;
-    }
-    return out;
-  }
-
   async function loadOnline(){
     if(!ONLINE||!currentUser)return false;
+    // A local change that has not synced is authoritative. Never overwrite it
+    // with an older cloud snapshot.
+    if(localStorage.getItem('cobblemon-livingdex-local-dirty')){
+      const ok=await saveOnline();
+      if(!ok)return false;
+    }
     const {data:p,error:pe}=await client.from('profiles').select('*').eq('id',currentUser.id).maybeSingle();
     const {data:s,error:se}=await client.from('player_saves').select('*').eq('user_id',currentUser.id).maybeSingle();
     if(pe||se){console.warn('LivingDex online load failed',pe||se);return false;}
@@ -122,17 +94,8 @@
       const remoteEmpty=!Object.keys(s.state||{}).length&&!Object.keys(s.favorites||{}).length&&!Object.keys(s.notes||{}).length&&!(s.team||[]).length&&!Object.keys(remoteTraining).length;
       const local=localPayload();
       const localNonEmpty=Object.keys(local.state).length||Object.keys(local.favorites).length||Object.keys(local.notes).length||local.team.length||Object.keys(local.training).length||local.settings.theme!=='dark';
-      const localDirty=!!localStorage.getItem('cobblemon-livingdex-local-dirty');
       if(remoteEmpty&&localNonEmpty){const ok=await saveOnline();if(!ok)return false;}
-      else if(localDirty){
-        const mergedState=mergeStateData(s.state||{},local.state||{});
-        const mergedTraining=mergeTrainingData(remoteTraining,local.training||{});
-        ['state','favorites','notes'].forEach(k=>{if(window[k]&&s[k]){Object.keys(window[k]).forEach(x=>delete window[k][x]);Object.assign(window[k],k==='state'?mergedState:s[k]);}});
-        if(Array.isArray(s.team)&&Array.isArray(window.team))window.team.splice(0,window.team.length,...s.team);
-        try{const rt={...mergedTraining},rs=rt.__settings||{},rj=rt.__journey;delete rt.__settings;delete rt.__journey;if(rj&&window.journey){Object.keys(window.journey).forEach(k=>delete window.journey[k]);Object.assign(window.journey,rj);localStorage.setItem('cobblemon-livingdex-journey',JSON.stringify(window.journey));}localStorage.setItem('cobblemon-livingdex-training',JSON.stringify(rt));if(rs.theme)localStorage.setItem('livingdex-theme',rs.theme);if(rt.__pokemonCounts){window.pokemonCounts=rt.__pokemonCounts;localStorage.setItem('cobblemon-livingdex-counts',JSON.stringify(rt.__pokemonCounts));}window.refreshTrainingStateV17?.();}catch{}
-        window.invalidateCollectionStatsV17?.();
-        const ok=await saveOnline();if(!ok)return false;
-      } else {
+      else if(!localStorage.getItem('cobblemon-livingdex-local-dirty')){
         ['state','favorites','notes'].forEach(k=>{if(window[k]&&s[k]){Object.keys(window[k]).forEach(x=>delete window[k][x]);Object.assign(window[k],s[k]);}});
         if(Array.isArray(s.team)&&Array.isArray(window.team))window.team.splice(0,window.team.length,...s.team);
         window.invalidateCollectionStatsV17?.();
@@ -542,63 +505,26 @@
     return {ok:true};
   }
   async function getGlobalActivity(){
-    const publicUrl=String(CFG.url||'').replace(/\/$/,'');
-    const publicKey=String(CFG.key||'');
-    if(!publicUrl||!publicKey)return [];
+    if(!ONLINE||!client)return [];
     const now=Date.now();
     if(globalActivityCache&&now-globalActivityCacheAt<30000)return globalActivityCache.slice();
-    try{
-      let data=null, error=null;
-
-      // The public Feed must not depend on the Supabase JS CDN. If that CDN is
-      // blocked/slow, the rest of the website can still load, but the Feed
-      // would otherwise incorrectly become empty. Call the SECURITY DEFINER
-      // RPC directly through PostgREST using the publishable key.
-      try{
-        const controller=new AbortController();
-        const timeout=setTimeout(()=>controller.abort(),5000);
-        let response;
-        try{
-          response=await fetch(`${publicUrl}/rest/v1/rpc/get_global_activity`,{
-            method:'POST',
-            headers:{apikey:publicKey,'Content-Type':'application/json'},
-            body:'{}',
-            cache:'no-store',
-            signal:controller.signal
-          });
-        }finally{clearTimeout(timeout);}
-        if(!response.ok)throw new Error(`Feed RPC HTTP ${response.status}`);
-        data=await response.json();
-      }catch(restErr){
-        // If PostgREST is temporarily unavailable, use the JS client when it exists.
-        if(!client)throw restErr;
-        const rpc=await client.rpc('get_global_activity');
-        data=rpc.data; error=rpc.error;
-        if(error){
-          const fallback=await client.from('global_activity_feed').select('*').order('ts',{ascending:false}).limit(100);
-          if(!fallback.error){data=fallback.data;error=null;}
-        }
-        if(error)throw error;
-      }
-
-      const rows=Array.isArray(data)?data.map(a=>({
-        ...a,
-        entryId:a?.entry_id||a?.entryId,
-        entryName:a?.entry_name||a?.entryName,
-        trainerName:a?.trainer_name||a?.trainerName||'Trainer',
-        activityUserId:a?.activity_user_id||a?.activityUserId
-      })).filter(a=>a&&a.id):[];
-      globalActivityCache=rows.slice(0,100);
-      globalActivityCacheAt=now;
-      return globalActivityCache.slice();
-    }catch(err){
-      console.warn('Global activity RPC failed',err);
-      globalActivityCache=[];
-      globalActivityCacheAt=now;
-      return [];
+    const [profilesRes,statsRes]=await Promise.all([
+      client.from('profiles').select('id,display_name').eq('show_profile',true).limit(100),
+      client.from('player_public_stats').select('user_id,training').limit(100)
+    ]);
+    if(profilesRes.error||statsRes.error) throw (profilesRes.error||statsRes.error);
+    const names=new Map((profilesRes.data||[]).map(p=>[p.id,p.display_name||'Trainer']));
+    const rows=[];
+    for(const item of (statsRes.data||[])){
+      const trainerName=names.get(item.user_id);
+      if(!trainerName)continue;
+      const activity=Array.isArray(item.training?.__activity)?item.training.__activity:[];
+      for(const a of activity){if(a&&a.type&&!['team_add','team_remove'].includes(a.type))rows.push({...a,trainerName,activityUserId:item.user_id});}
     }
+    rows.sort((a,b)=>Number(b.ts||0)-Number(a.ts||0));
+    globalActivityCache=rows.slice(0,100); globalActivityCacheAt=now;
+    return globalActivityCache.slice();
   }
-
   window.getGlobalActivityV17=getGlobalActivity;
   async function getFeedComments(activityIds=[]){if(!ONLINE||!client||!activityIds.length)return [];const {data,error}=await client.from('activity_comments').select('activity_id,user_id,body,created_at').in('activity_id',activityIds).order('created_at',{ascending:true});if(error){console.warn('Feed comments query failed',error);return [];}const rows=data||[];const ids=[...new Set(rows.map(c=>c.user_id).filter(Boolean))];let names=new Map();if(ids.length){const pr=await client.from('profiles').select('id,display_name,show_profile').in('id',ids);if(!pr.error)names=new Map((pr.data||[]).filter(p=>p.show_profile!==false).map(p=>[p.id,p.display_name||'Trainer']));}return rows.map(c=>({...c,display_name:names.get(c.user_id)||'Trainer'}));}
   async function getFeedReactions(activityIds=[]){
