@@ -3,11 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Cobblemon LivingDex — V3.6.67</title>
+<title>Cobblemon LivingDex — V3.6.21</title>
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
 <link rel="preconnect" href="https://raw.githubusercontent.com" crossorigin>
 <link rel="preconnect" href="https://pokeapi.co" crossorigin>
-<link rel="stylesheet" href="style.css?v=3.6.67">
+<link rel="stylesheet" href="style.css?v=3.6.21">
 </head>
 <body>
 <header class="topbar v2-topbar">
@@ -108,50 +108,13 @@
   <button id="infoClose" class="info-close" aria-label="Close">×</button>
   <div id="infoContent"></div>
 </aside>
-<script>
-(function(){
-  function show(msg){
-    var el=document.getElementById('bootError');
-    if(!el){el=document.createElement('pre');el.id='bootError';el.style.cssText='position:fixed;z-index:999999;left:16px;right:16px;bottom:16px;max-height:45vh;overflow:auto;background:#180d12;color:#ffb4b4;border:1px solid #ff5f6d;border-radius:12px;padding:16px;font:13px/1.45 monospace;white-space:pre-wrap;box-shadow:0 12px 40px #0008';document.body.appendChild(el);}
-    el.textContent='LIVINGDEX BOOT ERROR\\n\\n'+msg;
-  }
-  window.addEventListener('error',function(e){
-    // Chrome reports ResizeObserver loop notifications through the global error event.
-    // They are non-fatal browser/layout diagnostics and must not mask a real boot error.
-    var msg=String(e.message||'');
-    if(msg.includes('ResizeObserver loop completed with undelivered notifications') || msg.includes('ResizeObserver loop limit exceeded')) return;
-    show(msg+'\\n\\n'+(e.filename||'')+':'+(e.lineno||'?')+':'+(e.colno||'?'));
-  });
-  window.addEventListener('unhandledrejection',function(e){show('Unhandled promise rejection\\n\\n'+(e.reason?.stack||e.reason||'Unknown rejection'));});
-})();
-</script>
 <script defer src="data/cobblemon_local.js"></script>
-<script defer src="data/server_obtainability.js?v=3.6.67"></script>
-<script defer src="embedded.js?v=3.6.67"></script>
-<script defer src="app.js?v=3.6.67"></script>
-<script defer src="v11.js?v=3.6.67"></script>
-<script defer src="db-config.js?v=3.6.67"></script>
-<script>
-(function(){
-  // Never let the external Supabase CDN block the LivingDex UI. The Dex must boot offline/with blocked third-party CDNs.
-  function loadDb(){
-    if(document.querySelector('script[data-livingdex-db]')) return;
-    var s=document.createElement('script');
-    s.src='db.js?v=3.6.67';
-    s.dataset.livingdexDb='1';
-    s.defer=true;
-    document.head.appendChild(s);
-  }
-  var sup=document.createElement('script');
-  sup.src='https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';
-  sup.async=true;
-  sup.onload=loadDb;
-  sup.onerror=loadDb;
-  document.head.appendChild(sup);
-  // Safety net: if the CDN is blocked, keep the local Dex fully usable.
-  setTimeout(loadDb,7000);
-})();
-</script>
+<script defer src="data/server_obtainability.js?v=3.6.21"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script defer src="app.js?v=3.6.21"></script>
+<script defer src="v11.js?v=3.6.21"></script>
+<script defer src="db-config.js?v=3.6.21"></script>
+<script defer src="db.js?v=3.6.21"></script>
 <script>if("serviceWorker" in navigator){window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js",{scope:"./"}).catch(()=>{}));}</script>
 </body>
 </html>
