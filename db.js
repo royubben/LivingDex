@@ -727,6 +727,12 @@
   }
 
   async function boot(){
+    // db.js is loaded dynamically and can arrive before deferred app.js. Wait until
+    // the core Dex renderer is available instead of booting against an incomplete UI.
+    if(typeof window.renderDex!=='function' || typeof window.render!=='function'){
+      setTimeout(boot,25);
+      return;
+    }
     document.title='Cobblemon LivingDex — V1.7.7';
     // Install the local UI before any network request so Progress and the rest
     // of the application are immediately available even if auth is slow.
