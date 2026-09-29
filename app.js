@@ -657,7 +657,7 @@ function renderTabs(){const el=$('#tabSelect');const regions=[['kanto','Kanto'],
 function applySettings(){document.documentElement.lang='en';if($('#brandSubtitle'))$('#brandSubtitle').textContent='Personal collection tracker';document.body.classList.remove('light-mode');$('#search').placeholder='Search Pokémon, form, type or #number...';$('#resetBtn').textContent='Reset Collection';$$('.filter').forEach(b=>b.textContent=({collected:'✓ Caught',favorites:'★ Favorites'})[b.dataset.status]);$('#typesBtn').textContent='Type Filter';$('#settingsTitle').textContent='Settings';} 
 
 
-async function init(){DATA=EMBEDDED_DATA;entries=allEntries();renderTabs();renderTopNav();applySettings();try{renderView();}catch(err){console.error('LivingDex render error:',err);view='dex';renderDex();}if(!profile)showProfileSetup();else showWelcomeBack();loadCCCSpawnData().catch(err=>console.warn('[LivingDex] Background spawn sources unavailable:',err));}
+async function init(){DATA=EMBEDDED_DATA||DATA;entries=allEntries();renderTabs();renderTopNav();applySettings();try{renderView();}catch(err){console.error('LivingDex render error:',err);view='dex';renderDex();}if(!profile)showProfileSetup();else showWelcomeBack();loadCCCSpawnData().catch(err=>console.warn('[LivingDex] Background spawn sources unavailable:',err));}
 function populateProfileForm(p={}){
   const trainer=p.trainerName||'';
   const ign=p.ign||p.inGameName||'';
