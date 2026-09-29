@@ -1,6 +1,6 @@
 /* Cobblemon LivingDex V1.1 - LivingDex Plus */
 (() => {
-  const V11_VERSION = '1.7.16';
+  const V11_VERSION = '1.7.17';
   const adv = { generation:'all', type:'all', status:'all', special:'all' };
   let trainingSession = null;
   let trainingStats = JSON.parse(localStorage.getItem('cobblemon-livingdex-training') || '{}');
@@ -61,6 +61,8 @@
   for(const [oldId,newId] of Object.entries(V365_FORM_ALIASES)) migrateFormState(oldId,newId);
 
 
+  const PICHU_BIAS_ALIAS={'regional-bias-pichu-alola':'pichu|base|172|main'};
+  for(const [oldId,newId] of Object.entries(PICHU_BIAS_ALIAS))migrateFormState(oldId,newId);
   const V368_FORM_ALIASES={'minior-red-meteor|base|774|main':'minior|base|774|main','minior-red|base|10136|main':'minior-red|base|10136|special','minior-orange|base|10137|main':'minior-orange|base|10137|special','minior-yellow|base|10138|main':'minior-yellow|base|10138|special','minior-green|base|10139|main':'minior-green|base|10139|special','minior-blue|base|10140|main':'minior-blue|base|10140|special','minior-indigo|base|10141|main':'minior-indigo|base|10141|special','minior-violet|base|10142|main':'minior-violet|base|10142|special'};
   for(const [oldId,newId] of Object.entries(V368_FORM_ALIASES))migrateFormState(oldId,newId);
   const V367_FORM_ALIASES={'minior-red-meteor|base|774|main':'minior|base|774|main','minior-red|base|10136|main':'minior-red|base|10136|special','minior-orange|base|10137|main':'minior-orange|base|10137|special','minior-yellow|base|10138|main':'minior-yellow|base|10138|special','minior-green|base|10139|main':'minior-green|base|10139|special','minior-blue|base|10140|main':'minior-blue|base|10140|special','minior-indigo|base|10141|main':'minior-indigo|base|10141|special','minior-violet|base|10142|main':'minior-violet|base|10142|special'};
