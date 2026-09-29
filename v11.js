@@ -12,6 +12,8 @@
   if(!window.favorites) Object.defineProperty(window,'favorites',{configurable:true,get:()=>favorites});
   if(!window.notes) Object.defineProperty(window,'notes',{configurable:true,get:()=>notes});
   if(!window.team) Object.defineProperty(window,'team',{configurable:true,get:()=>team});
+  // V11-local sort helper: app.js keeps sortEntry in its own script scope, so V11 must not depend on that lexical binding.
+  const sortEntry=(a,b)=>Number(a.dex)-Number(b.dex)||(a.box||999)-(b.box||999)||(a.slot||999)-(b.slot||999);
   const adv = { generation:'all', type:'all', status:'all', special:'all' };
   let trainingSession = null;
   let trainingStats = JSON.parse(localStorage.getItem('cobblemon-livingdex-training') || '{}');
