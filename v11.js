@@ -14,6 +14,8 @@
   if(!window.team) Object.defineProperty(window,'team',{configurable:true,get:()=>team});
   // V11-local sort helper: app.js keeps sortEntry in its own script scope, so V11 must not depend on that lexical binding.
   const sortEntry=(a,b)=>Number(a.dex)-Number(b.dex)||(a.box||999)-(b.box||999)||(a.slot||999)-(b.slot||999);
+  // V11-local entry lookup: entryById is lexical inside app.js and is not visible from this script.
+  const entryById=id=>entries.find(e=>e?.id===id)||null;
   // V11-local DOM helpers: app.js keeps these in its own script scope.
   const $=s=>document.querySelector(s);
   const queryAll=s=>[...document.querySelectorAll(s)];
