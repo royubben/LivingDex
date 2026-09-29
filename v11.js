@@ -1,6 +1,6 @@
 /* Cobblemon LivingDex V1.1 - LivingDex Plus */
 (() => {
-  const V11_VERSION = '1.7.15';
+  const V11_VERSION = '1.7.11';
   const adv = { generation:'all', type:'all', status:'all', special:'all' };
   let trainingSession = null;
   let trainingStats = JSON.parse(localStorage.getItem('cobblemon-livingdex-training') || '{}');
@@ -14,56 +14,6 @@
     const shinies=trainingStats.__shinies ||= {};
     if (Number(shinies[oldId]||0)>Number(shinies[newId]||0)) shinies[newId]=Number(shinies[oldId]);
   }
-
-  // v3.6.63: special-form tabs were consolidated into the main LivingDex.
-  // Preserve existing catches/favorites/counts/shinies while the old IDs disappear.
-  const V363_FORM_ALIASES = {
-    'zygarde-10|base|718|forms':'zygarde-50|base|718|main',
-    'zygarde-50|base|718|forms':'zygarde-50|base|718|main',
-    'zygarde-complete|base|718|forms':'zygarde-50|base|718|main',
-    'tauros-paldea-combat-breed|base|128|forms':'regional-tauros-paldea-combat|paldea|128',
-    'tauros-paldea-blaze-breed|base|128|forms':'regional-tauros-paldea-blaze|paldea|128',
-    'tauros-paldea-aqua-breed|base|128|forms':'regional-tauros-paldea-aqua|paldea|128',
-    'deerling-autumn|base|585|forms':'deerling|autumn|585|main',
-    'deerling-summer|base|585|forms':'deerling|summer|585|main',
-    'deerling-winter|base|585|forms':'deerling|winter|585|main',
-    'sawsbuck-autumn|base|586|forms':'sawsbuck|autumn|586|main',
-    'sawsbuck-summer|base|586|forms':'sawsbuck|summer|586|main',
-    'sawsbuck-winter|base|586|forms':'sawsbuck|winter|586|main'
-  };
-  const V363_PREFIX_ALIASES = [
-    ['alcremie-', 'alcremie|base|869|main'],
-    ['arceus-', 'arceus|base|493|main'],
-    ['silvally-', 'silvally|base|773|main']
-  ];
-  const migrateFormState = (oldId,newId) => {
-    if(oldId===newId)return;
-    if(state[oldId]&&!state[newId])state[newId]=state[oldId];
-    if(favorites[oldId]&&!favorites[newId])favorites[newId]=favorites[oldId];
-    const counts=window.pokemonCounts ||= JSON.parse(localStorage.getItem('cobblemon-livingdex-counts') || '{}');
-    if(Number(counts[oldId]||0)>Number(counts[newId]||0))counts[newId]=Number(counts[oldId]);
-    const shinies=trainingStats.__shinies ||= {};
-    if(Number(shinies[oldId]||0)>Number(shinies[newId]||0))shinies[newId]=Number(shinies[oldId]);
-  };
-  for(const [oldId,newId] of Object.entries(V363_FORM_ALIASES))migrateFormState(oldId,newId);
-  for(const oldId of Object.keys(state)) for(const [prefix,newId] of V363_PREFIX_ALIASES) if(oldId.startsWith(prefix)) migrateFormState(oldId,newId);
-  for(const oldId of Object.keys(favorites)) for(const [prefix,newId] of V363_PREFIX_ALIASES) if(oldId.startsWith(prefix)) migrateFormState(oldId,newId);
-
-  // v3.6.65: normalize special-form IDs into the main LivingDex without losing local progress.
-  const V365_FORM_ALIASES = {
-    'castform-rainy|base|351|forms':'castform-rainy|base|351|main','castform-snowy|base|351|forms':'castform-snowy|base|351|main','castform-sunny|base|351|forms':'castform-sunny|base|351|main',
-    'ogerpon-cornerstone|base|1017|forms':'ogerpon-cornerstone|base|1017|main','ogerpon-cornerstone-tera|base|1017|forms':'ogerpon-cornerstone-tera|base|1017|main','ogerpon-hearthflame|base|1017|forms':'ogerpon-hearthflame|base|1017|main','ogerpon-hearthflame-tera|base|1017|forms':'ogerpon-hearthflame-tera|base|1017|main','ogerpon-teal-tera|base|1017|forms':'ogerpon-teal-tera|base|1017|main','ogerpon-wellspring|base|1017|forms':'ogerpon-wellspring|base|1017|main','ogerpon-wellspring-tera|base|1017|forms':'ogerpon-wellspring-tera|base|1017|main',
-    'squawkabilly-blue|base|931|forms':'squawkabilly-blue|base|931|main','squawkabilly-white|base|931|forms':'squawkabilly-white|base|931|main','squawkabilly-yellow|base|931|forms':'squawkabilly-yellow|base|931|main',
-    'tatsugiri-droopy|base|978|forms':'tatsugiri-droopy|base|978|main','tatsugiri-stretchy|base|978|forms':'tatsugiri-stretchy|base|978|main',
-    'pumpkaboo-small|base|710|special':'pumpkaboo-small|base|710|main','pumpkaboo-large|base|710|special':'pumpkaboo-large|base|710|main','pumpkaboo-super|base|710|special':'pumpkaboo-super|base|710|main',
-    'gourgeist-small|base|711|special':'gourgeist-small|base|711|main','gourgeist-large|base|711|special':'gourgeist-large|base|711|main','gourgeist-super|base|711|special':'gourgeist-super|base|711|main'
-  };
-  for(const [oldId,newId] of Object.entries(V365_FORM_ALIASES)) migrateFormState(oldId,newId);
-
-  const V367_FORM_ALIASES={'minior-red-meteor|base|774|main':'minior|base|774|main','minior-red|base|10136|main':'minior-red|base|10136|special','minior-orange|base|10137|main':'minior-orange|base|10137|special','minior-yellow|base|10138|main':'minior-yellow|base|10138|special','minior-green|base|10139|main':'minior-green|base|10139|special','minior-blue|base|10140|main':'minior-blue|base|10140|special','minior-indigo|base|10141|main':'minior-indigo|base|10141|special','minior-violet|base|10142|main':'minior-violet|base|10142|special'};
-  for(const [oldId,newId] of Object.entries(V367_FORM_ALIASES))migrateFormState(oldId,newId);
-  const V366_FORM_ALIASES = {'regional-bias-pichu-alola':'pichu|base|172|main','regional-bias-petilil-hisui':'petilil|base|548|main','regional-bias-goomy-hisui':'goomy|base|704|main','rockruff|dusk|744|main':'rockruff|base|744|main','minior-red-meteor|base|774|main':'minior|base|774|main'};
-  for(const [oldId,newId] of Object.entries(V366_FORM_ALIASES)) migrateFormState(oldId,newId);
 
 
   const saveTraining = (notifyCloud=true) => { localStorage.setItem('cobblemon-livingdex-training', JSON.stringify(trainingStats)); if(notifyCloud){ try { window.LivingDexOnline?.queueSave?.(); } catch {} } };
@@ -283,7 +233,7 @@
     return ds;
   };
   const DAILY_EXCLUDED_LABELS = new Set(['legendary','mythical','ultra_beast','paradox','restricted']);
-  const DAILY_EXCLUDED_ENTRY_IDS = new Set(["pumpkaboo-small|base|710|special","pumpkaboo-large|base|710|special","pumpkaboo-super|base|710|special","gimmighoul|roaming|999|main","staryu|patrickyu|120|main","maushold|base|925|main","maushold|four|925|main","deoxys|base|386|main","deoxys|attack|386|main","deoxys|defense|386|main","deoxys|speed|386|main","burmy|sandy|412|main","burmy|trash|412|main","wormadam|sandy|413|main","wormadam|trash|413|main","cherrim|sunshine|421|main","shellos|east|422|main","gastrodon|east|423|main","mime-jr|galarbias|439|main","rotom|heat|479|main","rotom|wash|479|main","rotom|frost|479|main","rotom|fan|479|main","rotom|mow|479|main","basculin|blue-striped|550|main","basculin|white-striped|550|main","darmanitan|galar|555|main","deerling|summer|585|main","deerling|autumn|585|main","deerling|winter|585|main","sawsbuck|summer|586|main","sawsbuck|autumn|586|main","sawsbuck|winter|586|main","flabebe|blue|669|main","flabebe|orange|669|main","flabebe|white|669|main","flabebe|yellow|669|main","flabebe|blue|669|special","flabebe|orange|669|special","flabebe|white|669|special","flabebe|yellow|669|special","floette|blue|670|special","floette|orange|670|special","floette|white|670|special","floette|yellow|670|special","florges|blue|671|special","florges|orange|671|special","florges|white|671|special","florges|yellow|671|special","meowstic|female|678|main","oricorio|pom-pom|741|main","oricorio|pau|741|main","oricorio|sensu|741|main","rockruff|dusk|744|main","lycanroc|midnight|745|main","lycanroc|dusk|745|main"]);
+  const DAILY_EXCLUDED_ENTRY_IDS = new Set(["gimmighoul|roaming|999|main","staryu|patrickyu|120|main","maushold|base|925|main","maushold|four|925|main","deoxys|base|386|main","deoxys|attack|386|main","deoxys|defense|386|main","deoxys|speed|386|main","burmy|sandy|412|main","burmy|trash|412|main","wormadam|sandy|413|main","wormadam|trash|413|main","cherrim|sunshine|421|main","shellos|east|422|main","gastrodon|east|423|main","mime-jr|galarbias|439|main","rotom|heat|479|main","rotom|wash|479|main","rotom|frost|479|main","rotom|fan|479|main","rotom|mow|479|main","basculin|blue-striped|550|main","basculin|white-striped|550|main","darmanitan|galar|555|main","deerling|summer|585|main","deerling|autumn|585|main","deerling|winter|585|main","sawsbuck|summer|586|main","sawsbuck|autumn|586|main","sawsbuck|winter|586|main","flabebe|blue|669|main","flabebe|orange|669|main","flabebe|white|669|main","flabebe|yellow|669|main","flabebe|blue|669|special","flabebe|orange|669|special","flabebe|white|669|special","flabebe|yellow|669|special","floette|blue|670|special","floette|orange|670|special","floette|white|670|special","floette|yellow|670|special","florges|blue|671|special","florges|orange|671|special","florges|white|671|special","florges|yellow|671|special","meowstic|female|678|main","oricorio|pom-pom|741|main","oricorio|pau|741|main","oricorio|sensu|741|main","rockruff|dusk|744|main","lycanroc|midnight|745|main","lycanroc|dusk|745|main"]);
   function isDailyEligible(e){
     if(!e?.box || DAILY_EXCLUDED_ENTRY_IDS.has(e.id)) return false;
     const sp=speciesForEntry(e);
@@ -1154,26 +1104,7 @@ function dailyFrozenEntryForDate(key){
     const now=Date.now();
     let posts;
     if(v2FeedRowsCache&&now-v2FeedRowsCacheAt<10000){ posts=v2FeedRowsCache.posts; }
-    else {
-      // Feed rendering must never depend on Community Posts or any secondary
-      // Supabase query. The public activity RPC is the primary Feed source.
-      // A slow/hung community query used to prevent the entire Feed from
-      // rendering at all.
-      // The primary RPC is also time-bounded. A stalled network request must
-      // never make the Feed navigation appear broken.
-      let globalRows=[];
-      try{
-        // getGlobalActivityV17 already has its own network timeout. Do not
-        // race it here: doing so can render the Feed from an empty cache while
-        // the real RPC response is still in flight.
-        globalRows=await v2LoadGlobalActivity();
-      }catch(err){console.warn('Global activity unavailable:',err);}
-      // Paint the primary global activity immediately. Community posts are
-      // secondary and are loaded only after the real activity rows are visible.
-      posts=[];
-      v2FeedRowsCache={posts,global:Array.isArray(globalRows)?globalRows:v2GlobalActivityRows()};
-      v2FeedRowsCacheAt=Date.now();
-    }
+    else { const [_,loadedPosts]=await Promise.all([v2LoadGlobalActivity(),v2LoadCommunityPosts()]); posts=loadedPosts; v2FeedRowsCache={posts}; v2FeedRowsCacheAt=Date.now(); }
     if(!posts) posts=[];
     if(v2FeedRowsCache && !v2FeedRowsCache.global) v2FeedRowsCache.global=v2GlobalActivityRows();
     const rawActivityRows=(v2FeedRowsCache?.global||v2GlobalActivityRows()).filter(a=>!['team_add','team_remove'].includes(a?.type)).map(a=>({...a,__community:false,activity_id:a.id}));
@@ -1194,7 +1125,7 @@ function dailyFrozenEntryForDate(key){
     const renderFeed=({comments=[],reactions=new Map()}={})=>{
       const byId=new Map();
       comments.forEach(c=>{const id=c.activity_id;if(!byId.has(id))byId.set(id,[]);byId.get(id).push(c);});
-      const html=rows.length?rows.map(a=>{try{
+      const html=rows.length?rows.map(a=>{
         const id=a.activity_id||a.id, cs=byId.get(id)||[];
         if(a.__community)return v2CommunityPostMarkup(a,cs,reactions);
         const text=v2GlobalActivityText(a), e=v2FeedEntry(a), media=v2FeedMedia(a), reactionData=reactions.get(id)||{counts:{},mine:''};
@@ -1202,7 +1133,7 @@ function dailyFrozenEntryForDate(key){
         const ownActivity=a.activityUserId===window.getCurrentTrainerIdV17?.();
         const deleteActivity=ownActivity?`<button type="button" class="v2-feed-delete" data-delete-activity="${escHtml(id)}" title="Delete post">Delete</button>`:'';
         return `<article class="v2-feed-post v2-social-post"><div class="v2-feed-post-top"><div class="v2-feed-author"><div class="v2-feed-avatar">${escHtml(String(a.trainerName||'Trainer').slice(0,1).toUpperCase())}</div><div><b>${a.type==='traded'?escHtml(a.trainerName||'Trainer')+' & '+escHtml(a.tradePartnerName||'Unknown Trainer'):escHtml(a.trainerName||'Trainer')}</b><small>${escHtml(v2FeedWhen(a))}</small></div></div><div class="v2-feed-post-head-actions"><span class="v2-feed-action-pill">${actionLabel}</span>${deleteActivity}</div></div><div class="v2-feed-copy"><strong>${a.type==='traded'?escHtml((a.trainerName||'Trainer')+' and '+(a.tradePartnerName||'Unknown Trainer')+' just had a trade.'):escHtml(text)}</strong>${a.type==='traded'?v2TradeMarkup(a):e?`<div class="v2-feed-pokemon-meta">${v2FeedMeta(a)}</div>`:''}</div>${a.type==='traded'?'':media}<div class="v2-feed-social-bar">${v2ReactionMarkup({id},reactionData)}<span class="v2-feed-comment-count">${cs.length} comments</span></div>${id?v2CommentMarkup({id},cs):''}</article>`;
-      }catch(err){console.warn('Feed row render failed:',a,err);const id=a?.activity_id||a?.id||'';const trainer=escHtml(a?.trainerName||'Trainer');const action=escHtml(v2ActivityText(a));return `<article class="v2-feed-post v2-social-post"><div class="v2-feed-post-top"><div class="v2-feed-author"><div class="v2-feed-avatar">${escHtml(String(a?.trainerName||'T').slice(0,1).toUpperCase())}</div><div><b>${trainer}</b><small>${escHtml(v2FeedWhen(a))}</small></div></div><span class="v2-feed-action-pill">ACTIVITY</span></div><div class="v2-feed-copy"><strong>${action}</strong></div></article>`;}}).join(''):`<div class="v2-empty-feed"><strong>No posts here yet.</strong><span>Be the first Trainer to start the conversation.</span></div>`;
+      }).join(''):`<div class="v2-empty-feed"><strong>No posts here yet.</strong><span>Be the first Trainer to start the conversation.</span></div>`;
       $('#view').innerHTML=`<div class="page-card v2-rich-page v2-feed-page"><div class="v2-feed-hero"><div><div class="eyebrow">TRAINER COMMUNITY</div><h2>Feed</h2><p>Trade, find Pokémon, share discoveries and connect with other Trainers.</p></div><div class="v2-feed-hero-mark">✦<span>LIVE COMMUNITY</span></div></div>${v2CommunityFilters()}<div class="v2-feed-list">${html}</div></div>`;
       $('#v2CreateCommunityPost')?.addEventListener('click',v2CommunityPostComposer);
       $$('[data-feed-filter]').forEach(b=>b.onclick=()=>{v2FeedFilter=b.dataset.feedFilter;v2RenderFeed();});
@@ -1210,29 +1141,8 @@ function dailyFrozenEntryForDate(key){
       document.querySelectorAll('[data-community-help]').forEach(b=>b.onclick=()=>v2OpenTradeRequest(b.dataset.communityHelp));
     };
 
-    // Paint the Feed from the primary activity RPC immediately.
-    // Community posts and social metadata must never be allowed to delay this.
+    // Paint the Feed as soon as the main activity/posts data arrives.
     renderFeed();
-
-    if(!opts.skipCommunity){
-      Promise.resolve().then(async()=>{
-        try{
-          const loadedPosts=await Promise.race([
-            v2LoadCommunityPosts(),
-            new Promise(resolve=>setTimeout(()=>resolve([]),2500))
-          ]);
-          if(!Array.isArray(loadedPosts))return;
-          v2CommunityPostsCache=loadedPosts;
-          if(v2FeedRowsCache){
-            v2FeedRowsCache.posts=loadedPosts;
-            v2FeedRowsCacheAt=Date.now();
-          }
-          // Repaint only after the primary Feed is already visible.
-          await v2RenderFeed({silent:true,skipCommunity:true});
-        }catch(err){console.warn('Community posts unavailable:',err);}
-      });
-    }
-
     v2StartFeedLive();
 
     // Comments + reactions are secondary; hydrate them after the Feed is visible.
@@ -1344,38 +1254,14 @@ function dailyFrozenEntryForDate(key){
     try{return Array.isArray(window.__v2GlobalActivityCache)?window.__v2GlobalActivityCache:[];}catch{return [];}
   }
   async function v2LoadGlobalActivity(){
-    // db.js is intentionally loaded dynamically after the UI scripts. The Feed
-    // must therefore wait briefly for its public loader instead of treating
-    // "not defined yet" as a real empty Feed.
-    let loader=window.getGlobalActivityV17;
-    if(typeof loader!=='function'){
-      const started=Date.now();
-      while(typeof window.getGlobalActivityV17!=='function' && Date.now()-started<8000){
-        await new Promise(resolve=>setTimeout(resolve,100));
-      }
-      loader=window.getGlobalActivityV17;
-    }
-    if(typeof loader!=='function'){
-      console.warn('Global activity loader was not ready after 8 seconds');
-      return Array.isArray(window.__v2GlobalActivityCache)?window.__v2GlobalActivityCache:[];
-    }
+    if(typeof window.getGlobalActivityV17!=='function') return;
     try{
-      const rows=await loader();
+      const rows=await window.getGlobalActivityV17();
       window.__v2GlobalActivityCache=Array.isArray(rows)?rows:[];
-      // Always return the freshly loaded rows. The Feed used to race this
-      // loader against a timeout, which produced a blank Feed even when the
-      // RPC itself had valid rows.
-      if(view==='home'){
-        const el=$('#v2HomeFeed');
-        if(el && document.body.dataset.v2FeedMode==='global') v2RenderHomeFeed('global');
-      }
-      return window.__v2GlobalActivityCache;
-    }catch(err){
-      console.warn('Global activity unavailable',err);
-      // Never overwrite a known-good cache with an empty array after a
-      // transient request failure.
-      return Array.isArray(window.__v2GlobalActivityCache)?window.__v2GlobalActivityCache:[];
-    }
+      if(view!=='home') return;
+      const el=$('#v2HomeFeed'); if(!el) return;
+      if(document.body.dataset.v2FeedMode==='global') v2RenderHomeFeed('global');
+    }catch(err){console.warn('Global activity unavailable',err);}
   }
   function v2CollapseDailyCatchRows(rows){
     const dailyRows=rows.filter(a=>a?.type==='daily_complete');
@@ -1634,7 +1520,7 @@ function dailyFrozenEntryForDate(key){
     // The V1.0 app initializes before this file loads, so explicitly render the
     // default view here as well; this prevents a blank first screen until the
     // LivingDex button is clicked.
-    view='dex';
+    view='home';
     renderTopNav();
     renderView();
     const v2n=document.querySelector('#v2TrainerName'); if(v2n)v2n.textContent=v2Name();
