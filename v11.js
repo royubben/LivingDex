@@ -1,6 +1,6 @@
 /* Cobblemon LivingDex V1.1 - LivingDex Plus */
 (() => {
-  const V11_VERSION = '1.7.11';
+  const V11_VERSION = '1.7.12';
   const adv = { generation:'all', type:'all', status:'all', special:'all' };
   let trainingSession = null;
   let trainingStats = JSON.parse(localStorage.getItem('cobblemon-livingdex-training') || '{}');
@@ -48,6 +48,17 @@
   for(const [oldId,newId] of Object.entries(V363_FORM_ALIASES))migrateFormState(oldId,newId);
   for(const oldId of Object.keys(state)) for(const [prefix,newId] of V363_PREFIX_ALIASES) if(oldId.startsWith(prefix)) migrateFormState(oldId,newId);
   for(const oldId of Object.keys(favorites)) for(const [prefix,newId] of V363_PREFIX_ALIASES) if(oldId.startsWith(prefix)) migrateFormState(oldId,newId);
+
+  // v3.6.65: normalize special-form IDs into the main LivingDex without losing local progress.
+  const V365_FORM_ALIASES = {
+    'castform-rainy|base|351|forms':'castform-rainy|base|351|main','castform-snowy|base|351|forms':'castform-snowy|base|351|main','castform-sunny|base|351|forms':'castform-sunny|base|351|main',
+    'ogerpon-cornerstone|base|1017|forms':'ogerpon-cornerstone|base|1017|main','ogerpon-cornerstone-tera|base|1017|forms':'ogerpon-cornerstone-tera|base|1017|main','ogerpon-hearthflame|base|1017|forms':'ogerpon-hearthflame|base|1017|main','ogerpon-hearthflame-tera|base|1017|forms':'ogerpon-hearthflame-tera|base|1017|main','ogerpon-teal-tera|base|1017|forms':'ogerpon-teal-tera|base|1017|main','ogerpon-wellspring|base|1017|forms':'ogerpon-wellspring|base|1017|main','ogerpon-wellspring-tera|base|1017|forms':'ogerpon-wellspring-tera|base|1017|main',
+    'squawkabilly-blue|base|931|forms':'squawkabilly-blue|base|931|main','squawkabilly-white|base|931|forms':'squawkabilly-white|base|931|main','squawkabilly-yellow|base|931|forms':'squawkabilly-yellow|base|931|main',
+    'tatsugiri-droopy|base|978|forms':'tatsugiri-droopy|base|978|main','tatsugiri-stretchy|base|978|forms':'tatsugiri-stretchy|base|978|main',
+    'pumpkaboo-small|base|710|special':'pumpkaboo-small|base|710|main','pumpkaboo-large|base|710|special':'pumpkaboo-large|base|710|main','pumpkaboo-super|base|710|special':'pumpkaboo-super|base|710|main',
+    'gourgeist-small|base|711|special':'gourgeist-small|base|711|main','gourgeist-large|base|711|special':'gourgeist-large|base|711|main','gourgeist-super|base|711|special':'gourgeist-super|base|711|main'
+  };
+  for(const [oldId,newId] of Object.entries(V365_FORM_ALIASES)) migrateFormState(oldId,newId);
 
 
   const saveTraining = (notifyCloud=true) => { localStorage.setItem('cobblemon-livingdex-training', JSON.stringify(trainingStats)); if(notifyCloud){ try { window.LivingDexOnline?.queueSave?.(); } catch {} } };
