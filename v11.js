@@ -1576,7 +1576,14 @@ function dailyFrozenEntryForDate(key){
   };
   window.renderView = function(){
     if(view==='home'){renderV2Home();return;}
-    if(view==='dex'){\n      const renderDexWhenReady=()=>{\n        if(typeof window.renderDex==='function'){window.renderDex();return;}\n        setTimeout(renderDexWhenReady,50);\n      };\n      renderDexWhenReady();\n      return;\n    }
+    if(view==='dex'){
+      const renderDexWhenReady=()=>{
+        if(typeof window.renderDex==='function'){window.renderDex();return;}
+        setTimeout(renderDexWhenReady,50);
+      };
+      renderDexWhenReady();
+      return;
+    }
     if(view==='pokesnack'){$('#dexView').hidden=true;$('#view').hidden=false;renderPokeSnackMaker();return;}
     $('#dexView').hidden=true;$('#view').hidden=false;
     if(view==='team')renderTeam();
