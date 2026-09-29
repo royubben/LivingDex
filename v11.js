@@ -23,6 +23,8 @@
   const greetingName=()=>JSON.parse(localStorage.getItem('cobblemon-livingdex-profile')||'null')?.trainerName||'Trainer';
 // V11-local UI helper: closeInfo is lexical inside app.js and is not visible here.
 const closeInfo=()=>{const el=$('#infoDropdown');if(el)el.hidden=true;const overlay=$('#infoOverlay');if(overlay)overlay.hidden=true;document.body.classList.remove('modal-open');};
+  // Shared app.js API bridge. These names used to resolve accidentally through app.js lexical scope.
+  const pageEntries=window.pageEntries,showdownHomeSlug=window.showdownHomeSlug,evoHtml=window.evoHtml,localSpawn=window.localSpawn,esc=window.esc,speciesForEntry=window.speciesForEntry,prettyLabel=window.prettyLabel,typeLabel=window.typeLabel,T=window.T,entryTypes=window.entryTypes,spritePath=window.spritePath,typeStyle=window.typeStyle,statHtml=window.statHtml,bindInfoTabs=window.bindInfoTabs,saveAll=window.saveAll,openInfo=window.openInfo,toggleTeam=window.toggleTeam,speciesKeyFromName=window.speciesKeyFromName,norm=window.norm,effectiveness=window.effectiveness,assistantName=window.assistantName,renderTeam=window.renderTeam,saveProfile=window.saveProfile;
   const adv = { generation:'all', type:'all', status:'all', special:'all' };
   let trainingSession = null;
   let trainingStats = JSON.parse(localStorage.getItem('cobblemon-livingdex-training') || '{}');
