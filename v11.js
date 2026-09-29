@@ -1282,13 +1282,27 @@ function dailyFrozenEntryForDate(key){
     try{return Array.isArray(window.__v2GlobalActivityCache)?window.__v2GlobalActivityCache:[];}catch{return [];}
   }
   async function v2LoadGlobalActivity(){
-    if(typeof window.getGlobalActivityV17!=='function') return [];
+    // db.js is intentionally loaded dynamically after the UI scripts. The Feed
+    // must therefore wait briefly for its public loader instead of treating
+    // "not defined yet" as a real empty Feed.
+    let loader=window.getGlobalActivityV17;
+    if(typeof loader!=='function'){
+      const started=Date.now();
+      while(typeof window.getGlobalActivityV17!=='function' && Date.now()-started<8000){
+        await new Promise(resolve=>setTimeout(resolve,100));
+      }
+      loader=window.getGlobalActivityV17;
+    }
+    if(typeof loader!=='function'){
+      console.warn('Global activity loader was not ready after 8 seconds');
+      return Array.isArray(window.__v2GlobalActivityCache)?window.__v2GlobalActivityCache:[];
+    }
     try{
-      const rows=await window.getGlobalActivityV17();
+      const rows=await loader();
       window.__v2GlobalActivityCache=Array.isArray(rows)?rows:[];
       // Always return the freshly loaded rows. The Feed used to race this
-      // loader against a timeout and then read the old (empty) cache, which
-      // produced a completely blank Feed even when the RPC had valid rows.
+      // loader against a timeout, which produced a blank Feed even when the
+      // RPC itself had valid rows.
       if(view==='home'){
         const el=$('#v2HomeFeed');
         if(el && document.body.dataset.v2FeedMode==='global') v2RenderHomeFeed('global');
@@ -1296,8 +1310,9 @@ function dailyFrozenEntryForDate(key){
       return window.__v2GlobalActivityCache;
     }catch(err){
       console.warn('Global activity unavailable',err);
-      window.__v2GlobalActivityCache=[];
-      return [];
+      // Never overwrite a known-good cache with an empty array after a
+      // transient request failure.
+      return Array.isArray(window.__v2GlobalActivityCache)?window.__v2GlobalActivityCache:[];
     }
   }
   function v2CollapseDailyCatchRows(rows){
