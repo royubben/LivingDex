@@ -3,11 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Cobblemon LivingDex — V3.6.69</title>
+<title>Cobblemon LivingDex — V3.6.70</title>
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
 <link rel="preconnect" href="https://raw.githubusercontent.com" crossorigin>
 <link rel="preconnect" href="https://pokeapi.co" crossorigin>
-<link rel="stylesheet" href="style.css?v=3.6.69">
+<link rel="stylesheet" href="style.css?v=3.6.70">
 </head>
 <body>
 <header class="topbar v2-topbar">
@@ -126,18 +126,18 @@
 })();
 </script>
 <script defer src="data/cobblemon_local.js"></script>
-<script defer src="data/server_obtainability.js?v=3.6.69"></script>
-<script defer src="embedded.js?v=3.6.69"></script>
-<script defer src="app.js?v=3.6.69"></script>
-<script defer src="v11.js?v=3.6.69"></script>
-<script defer src="db-config.js?v=3.6.69"></script>
+<script defer src="data/server_obtainability.js?v=3.6.70"></script>
+<script defer src="embedded.js?v=3.6.70"></script>
+<script defer src="app.js?v=3.6.70"></script>
+<script defer src="v11.js?v=3.6.70"></script>
+<script defer src="db-config.js?v=3.6.70"></script>
 <script>
 (function(){
   // Never let the external Supabase CDN block the LivingDex UI. The Dex must boot offline/with blocked third-party CDNs.
   function loadDb(){
     if(document.querySelector('script[data-livingdex-db]')) return;
     var s=document.createElement('script');
-    s.src='db.js?v=3.6.69';
+    s.src='db.js?v=3.6.70';
     s.dataset.livingdexDb='1';
     s.defer=true;
     document.head.appendChild(s);
