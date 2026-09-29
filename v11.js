@@ -1118,20 +1118,11 @@ function dailyFrozenEntryForDate(key){
         // the real RPC response is still in flight.
         globalRows=await v2LoadGlobalActivity();
       }catch(err){console.warn('Global activity unavailable:',err);}
+      // Paint the primary global activity immediately. Community posts are
+      // secondary and are loaded only after the real activity rows are visible.
       posts=[];
       v2FeedRowsCache={posts,global:Array.isArray(globalRows)?globalRows:v2GlobalActivityRows()};
       v2FeedRowsCacheAt=Date.now();
-      // Community posts are optional and must never block the Feed.
-      try{
-        const loadedPosts=await Promise.race([
-          v2LoadCommunityPosts(),
-          new Promise(resolve=>setTimeout(()=>resolve([]),2500))
-        ]);
-        posts=Array.isArray(loadedPosts)?loadedPosts:[];
-        v2FeedRowsCache.posts=posts;
-      }catch(err){
-        console.warn('Community posts unavailable:',err);
-      }
     }
     if(!posts) posts=[];
     if(v2FeedRowsCache && !v2FeedRowsCache.global) v2FeedRowsCache.global=v2GlobalActivityRows();
@@ -1169,8 +1160,29 @@ function dailyFrozenEntryForDate(key){
       document.querySelectorAll('[data-community-help]').forEach(b=>b.onclick=()=>v2OpenTradeRequest(b.dataset.communityHelp));
     };
 
-    // Paint the Feed as soon as the main activity/posts data arrives.
+    // Paint the Feed from the primary activity RPC immediately.
+    // Community posts and social metadata must never be allowed to delay this.
     renderFeed();
+
+    if(!opts.skipCommunity){
+      Promise.resolve().then(async()=>{
+        try{
+          const loadedPosts=await Promise.race([
+            v2LoadCommunityPosts(),
+            new Promise(resolve=>setTimeout(()=>resolve([]),2500))
+          ]);
+          if(!Array.isArray(loadedPosts))return;
+          v2CommunityPostsCache=loadedPosts;
+          if(v2FeedRowsCache){
+            v2FeedRowsCache.posts=loadedPosts;
+            v2FeedRowsCacheAt=Date.now();
+          }
+          // Repaint only after the primary Feed is already visible.
+          await v2RenderFeed({silent:true,skipCommunity:true});
+        }catch(err){console.warn('Community posts unavailable:',err);}
+      });
+    }
+
     v2StartFeedLive();
 
     // Comments + reactions are secondary; hydrate them after the Feed is visible.
