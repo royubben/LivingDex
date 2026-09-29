@@ -15,6 +15,7 @@
   if (ONLINE) client = window.supabase.createClient(CFG.url, CFG.key, { auth: { persistSession: true, autoRefreshToken: true } });
 
   const $ = (s) => document.querySelector(s);
+  const $ = (s) => document.querySelectorAll(s);
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const pct = (a,b) => b ? Math.round(Number(a||0) / Number(b) * 100) : 0;
   let entryMapCache=null;
