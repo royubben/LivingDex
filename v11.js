@@ -17,6 +17,8 @@
   // V11-local DOM helpers: app.js keeps these in its own script scope.
   const $=s=>document.querySelector(s);
   const queryAll=s=>[...document.querySelectorAll(s)];
+  // V11-local profile helper: greetingName is lexical inside app.js and is not visible here.
+  const greetingName=()=>JSON.parse(localStorage.getItem('cobblemon-livingdex-profile')||'null')?.trainerName||'Trainer';
   const adv = { generation:'all', type:'all', status:'all', special:'all' };
   let trainingSession = null;
   let trainingStats = JSON.parse(localStorage.getItem('cobblemon-livingdex-training') || '{}');
