@@ -1,7 +1,17 @@
 /* Cobblemon LivingDex V1.1 - LivingDex Plus */
 (() => {
   const V11_VERSION = '1.7.18';
-  const state=window.state, favorites=window.favorites, notes=window.notes, team=window.team, entries=window.entries, DATA=window.DATA;
+  // App-state bridge: prefer app.js bindings, but safely recover if app.js was interrupted before its bridge initialized.
+  const state=window.state ?? JSON.parse(localStorage.getItem('cobblemon-livingdex-state')||'{}');
+  const favorites=window.favorites ?? JSON.parse(localStorage.getItem('cobblemon-livingdex-favorites')||'{}');
+  const notes=window.notes ?? JSON.parse(localStorage.getItem('cobblemon-livingdex-notes')||'{}');
+  const team=window.team ?? JSON.parse(localStorage.getItem('cobblemon-livingdex-team')||'[]');
+  const entries=window.entries ?? [];
+  const DATA=window.DATA ?? window.EMBEDDED_DATA ?? {main:[],special:[]};
+  if(!window.state) Object.defineProperty(window,'state',{configurable:true,get:()=>state});
+  if(!window.favorites) Object.defineProperty(window,'favorites',{configurable:true,get:()=>favorites});
+  if(!window.notes) Object.defineProperty(window,'notes',{configurable:true,get:()=>notes});
+  if(!window.team) Object.defineProperty(window,'team',{configurable:true,get:()=>team});
   const adv = { generation:'all', type:'all', status:'all', special:'all' };
   let trainingSession = null;
   let trainingStats = JSON.parse(localStorage.getItem('cobblemon-livingdex-training') || '{}');
