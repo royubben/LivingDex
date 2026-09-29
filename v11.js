@@ -1111,14 +1111,15 @@ function dailyFrozenEntryForDate(key){
       // rendering at all.
       // The primary RPC is also time-bounded. A stalled network request must
       // never make the Feed navigation appear broken.
+      let globalRows=[];
       try{
-        await Promise.race([
-          v2LoadGlobalActivity(),
-          new Promise(resolve=>setTimeout(resolve,5500))
-        ]);
+        // getGlobalActivityV17 already has its own network timeout. Do not
+        // race it here: doing so can render the Feed from an empty cache while
+        // the real RPC response is still in flight.
+        globalRows=await v2LoadGlobalActivity();
       }catch(err){console.warn('Global activity unavailable:',err);}
       posts=[];
-      v2FeedRowsCache={posts,global:v2GlobalActivityRows()};
+      v2FeedRowsCache={posts,global:Array.isArray(globalRows)?globalRows:v2GlobalActivityRows()};
       v2FeedRowsCacheAt=Date.now();
       // Community posts are optional and must never block the Feed.
       try{
@@ -1281,14 +1282,23 @@ function dailyFrozenEntryForDate(key){
     try{return Array.isArray(window.__v2GlobalActivityCache)?window.__v2GlobalActivityCache:[];}catch{return [];}
   }
   async function v2LoadGlobalActivity(){
-    if(typeof window.getGlobalActivityV17!=='function') return;
+    if(typeof window.getGlobalActivityV17!=='function') return [];
     try{
       const rows=await window.getGlobalActivityV17();
       window.__v2GlobalActivityCache=Array.isArray(rows)?rows:[];
-      if(view!=='home') return;
-      const el=$('#v2HomeFeed'); if(!el) return;
-      if(document.body.dataset.v2FeedMode==='global') v2RenderHomeFeed('global');
-    }catch(err){console.warn('Global activity unavailable',err);}
+      // Always return the freshly loaded rows. The Feed used to race this
+      // loader against a timeout and then read the old (empty) cache, which
+      // produced a completely blank Feed even when the RPC had valid rows.
+      if(view==='home'){
+        const el=$('#v2HomeFeed');
+        if(el && document.body.dataset.v2FeedMode==='global') v2RenderHomeFeed('global');
+      }
+      return window.__v2GlobalActivityCache;
+    }catch(err){
+      console.warn('Global activity unavailable',err);
+      window.__v2GlobalActivityCache=[];
+      return [];
+    }
   }
   function v2CollapseDailyCatchRows(rows){
     const dailyRows=rows.filter(a=>a?.type==='daily_complete');
