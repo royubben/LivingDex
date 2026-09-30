@@ -890,6 +890,7 @@ function dailyFrozenEntryForDate(key){
     const source=resolvedSource?.name||a?.sourceName||'';
     switch(a?.type){
       case 'caught': return name?(a?.shiny?`Caught a shiny ${name} ✨`:`Caught ${name}`):(a?.shiny?'Caught a shiny Pokémon ✨':'Caught a Pokémon');
+      case 'raid_caught': return name?(a?.shiny?`Caught a shiny ${name} after battling it in a raid ✨`:`Caught ${name} after battling it in a raid`):'Caught a Pokémon after battling it in a raid';
       case 'shiny_caught': return name?`Found a shiny ${name} ✨`:'Found a shiny Pokémon ✨';
       case 'shiny_added': return name?`Added another shiny ${name} ✨`:'Added another shiny Pokémon ✨';
       case 'shiny_uncaught': return name?`Removed shiny ${name} from the collection`:'Removed a shiny Pokémon from the collection';
@@ -959,7 +960,7 @@ function dailyFrozenEntryForDate(key){
     ];
     $('#view').innerHTML=`<div class="page-card v2-rich-page"><div class="page-title"><div><div class="eyebrow">TRAINER OBJECTIVES</div><h2>Goals</h2><p>Small goals keep your collection moving without turning the app into a grind.</p></div></div><div class="v2-goal-list">${goals.map(g=>{const p=v2Pct(g[1],g[2]);return `<article class="v2-goal"><div class="v2-goal-top"><div><b>${escHtml(g[0])}</b><small>${escHtml(String(g[3]))}</small></div><strong>${Math.min(g[1],g[2])}/${g[2]}</strong></div><div class="v2-wide-progress"><i style="width:${p}%"></i></div></article>`}).join('')}</div></div>`;
   }
-  function v2FeedIcon(a){return a?.type==='caught'?'✦':a?.type?.startsWith('shiny_')?'✨':a?.type==='evolved'?'↗':a?.type==='traded'?'⇄':a?.type==='training_complete'?'⚔':a?.type?.startsWith('daily')?'★':'•';}
+  function v2FeedIcon(a){return a?.type==='raid_caught'?'⚔':a?.type==='caught'?'✦':a?.type?.startsWith('shiny_')?'✨':a?.type==='evolved'?'↗':a?.type==='traded'?'⇄':a?.type==='training_complete'?'⚔':a?.type?.startsWith('daily')?'★':'•';}
   function v2FeedWhen(a){return a?.ts?new Date(Number(a.ts)).toLocaleString([], {day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):(a?.date||'');}
 
   let v2FeedFilter='all';
@@ -1129,7 +1130,7 @@ function dailyFrozenEntryForDate(key){
         const id=a.activity_id||a.id, cs=byId.get(id)||[];
         if(a.__community)return v2CommunityPostMarkup(a,cs,reactions);
         const text=v2GlobalActivityText(a), e=v2FeedEntry(a), media=v2FeedMedia(a), reactionData=reactions.get(id)||{counts:{},mine:''};
-        const actionLabel=a.type==='caught'?'CAUGHT':a.type==='evolved'?'EVOLVED':a.type==='traded'?'TRADE':a.type==='training_complete'?'TRAINING':a.type?.startsWith('daily')?'DAILY':'TRAINER UPDATE';
+        const actionLabel=a.type==='raid_caught'?'RAID':a.type==='caught'?'CAUGHT':a.type==='evolved'?'EVOLVED':a.type==='traded'?'TRADE':a.type==='training_complete'?'TRAINING':a.type?.startsWith('daily')?'DAILY':'TRAINER UPDATE';
         const ownActivity=a.activityUserId===window.getCurrentTrainerIdV17?.();
         const deleteActivity=ownActivity?`<button type="button" class="v2-feed-delete" data-delete-activity="${escHtml(id)}" title="Delete post">Delete</button>`:'';
         return `<article class="v2-feed-post v2-social-post"><div class="v2-feed-post-top"><div class="v2-feed-author"><div class="v2-feed-avatar">${escHtml(String(a.trainerName||'Trainer').slice(0,1).toUpperCase())}</div><div><b>${a.type==='traded'?escHtml(a.trainerName||'Trainer')+' & '+escHtml(a.tradePartnerName||'Unknown Trainer'):escHtml(a.trainerName||'Trainer')}</b><small>${escHtml(v2FeedWhen(a))}</small></div></div><div class="v2-feed-post-head-actions"><span class="v2-feed-action-pill">${actionLabel}</span>${deleteActivity}</div></div><div class="v2-feed-copy"><strong>${a.type==='traded'?escHtml((a.trainerName||'Trainer')+' and '+(a.tradePartnerName||'Unknown Trainer')+' just had a trade.'):escHtml(text)}</strong>${a.type==='traded'?v2TradeMarkup(a):e?`<div class="v2-feed-pokemon-meta">${v2FeedMeta(a)}</div>`:''}</div>${a.type==='traded'?'':media}<div class="v2-feed-social-bar">${v2ReactionMarkup({id},reactionData)}<span class="v2-feed-comment-count">${cs.length} comments</span></div>${id?v2CommentMarkup({id},cs):''}</article>`;
