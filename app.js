@@ -161,9 +161,9 @@ function serverSourceRowsForEntry(e){
 }
 
 
-const SPAWN_SOURCE_VERSION='3.6.4-server-sources-2026-09-28';
+const SPAWN_SOURCE_VERSION='4.0.4-server-sources-2026-09-30';
 const SPAWN_SOURCE_CONFIG=[
-  {id:'ccc',label:'Complete Cobblemon Collection',api:'https://api.github.com/repos/Complete-Cobblemon-Collection-Team/resourcepack/contents/main/data/cobblemon/spawn_pool_world?ref=2.1',raw:'https://raw.githubusercontent.com/Complete-Cobblemon-Collection-Team/resourcepack/2.1/main/data/cobblemon/spawn_pool_world/',kind:'natural'},
+  {id:'ccc',label:'Complete Cobblemon Collection',api:'https://api.github.com/repos/Complete-Cobblemon-Collection-Team/datapack/contents/main/data/cobblemon/spawn_pool_world?ref=1.7.0/main',raw:'https://raw.githubusercontent.com/Complete-Cobblemon-Collection-Team/datapack/1.7.0/main/data/cobblemon/spawn_pool_world/',kind:'natural'},
   {id:'allthemons',label:'AllTheMons',api:'https://api.github.com/repos/AllTheMods/All-the-Mons/contents/kubejs/data/cobblemon/spawn_pool_world?ref=main',raw:'https://raw.githubusercontent.com/AllTheMods/All-the-Mons/main/kubejs/data/cobblemon/spawn_pool_world/',kind:'natural'},
   {id:'raiddens',label:'Cobblemon Raid Dens',api:'https://api.github.com/repos/necro50n3/cobblemon-raiddens/contents/common/src/main/resources/data/cobblemonraiddens/raid/boss?ref=master',raw:'https://raw.githubusercontent.com/necro50n3/cobblemon-raiddens/master/common/src/main/resources/data/cobblemonraiddens/raid/boss/',kind:'raid'}
 ];
@@ -520,7 +520,10 @@ function localSpawn(e){
       const rowBase=pokemon.split(' ')[0];
       if(rowBase!==baseKey) continue;
       const rowTokens=normalizeAspectTokens(pokemon.split(/\s+/).slice(1).join(' '));
-      const wanted=new Set([...suffixTokens,...formTokens]);
+      const normalizedSuffix=new Set([...suffixTokens].map(t=>({
+        alola:'alolan',galar:'galarian',hisui:'hisuian',paldea:'paldean'
+      }[t]||t));
+      const wanted=new Set([...normalizedSuffix,...formTokens]);
       if(wanted.size && [...wanted].every(t=>rowTokens.has(t))) out.push(row);
     }
   }
