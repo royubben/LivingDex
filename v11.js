@@ -1248,6 +1248,11 @@ function dailyFrozenEntryForDate(key){
   function v2GlobalActivityText(a){
     const name=a?.name||a?.entryName||'';
     const trainer=a?.trainerName||'Trainer';
+    if(a?.type==='raid_caught'){
+      return name
+        ? `${trainer} caught ${name} after battling it in a raid${a?.shiny?' ✨':''}`
+        : `${trainer} caught a Pokémon after battling it in a raid`;
+    }
     const action=v2ActivityText(a);
     return `${trainer} · ${action}`;
   }
