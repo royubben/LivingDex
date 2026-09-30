@@ -89,6 +89,10 @@
       localStorage.setItem('cobblemon-livingdex-profile',JSON.stringify({...lp,...p,trainerName:p.display_name,assistantName:p.dex_name}));
     }
     if(s){
+      // Repair legacy bridge keys before they reach local state.
+      const normalizedRemoteState={...(s.state||{})};
+      const remoteStateMigrated=window.normalizeLivingDexStateKeys?.(normalizedRemoteState)||false;
+      if(remoteStateMigrated)s.state=normalizedRemoteState;
       if(s.updated_at) localStorage.setItem('cobblemon-livingdex-last-server-state-sync',s.updated_at);
       const remoteTraining=s.training||{};
       const remoteEmpty=!Object.keys(s.state||{}).length&&!Object.keys(s.favorites||{}).length&&!Object.keys(s.notes||{}).length&&!(s.team||[]).length&&!Object.keys(remoteTraining).length;
