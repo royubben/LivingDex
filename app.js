@@ -45,6 +45,27 @@ let DATA,entries=[],tab='main',page=1,status='all',query='',selectedTypes=[],lan
 const PAGE_SIZE=30;
 const state=JSON.parse(localStorage.getItem('cobblemon-livingdex-state')||'{}');
 Object.keys(state).forEach(k=>{const n=Number(state[k]);state[k]=Number.isFinite(n)&&n>0?n:1;});
+
+// Legacy bridge correction: Minior Red was once written with Yellow's dex id (10138).
+// Canonical LivingDex ids are Red=10136 and Yellow=10138.
+const LEGACY_STATE_KEY_ALIASES={
+  'minior-red|base|10138':'minior-red|base|10136'
+};
+function migrateLegacyStateKeys(target){
+  let changed=false;
+  for(const [oldId,newId] of Object.entries(LEGACY_STATE_KEY_ALIASES)){
+    if(Object.prototype.hasOwnProperty.call(target,oldId)){
+      const oldCount=Math.max(0,Number(target[oldId]||0));
+      const newCount=Math.max(0,Number(target[newId]||0));
+      if(oldCount>newCount) target[newId]=oldCount;
+      delete target[oldId];
+      changed=true;
+    }
+  }
+  return changed;
+}
+migrateLegacyStateKeys(state);
+window.normalizeLivingDexStateKeys=(target)=>migrateLegacyStateKeys(target||{});
 function pokemonOwnedCount(id){return Math.max(0,Number(state[id]||0));}
 const favorites=JSON.parse(localStorage.getItem('cobblemon-livingdex-favorites')||'{}');
 const notes=JSON.parse(localStorage.getItem('cobblemon-livingdex-notes')||'{}');
