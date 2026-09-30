@@ -64,7 +64,7 @@ function migrateLegacyStateKeys(target){
   }
   return changed;
 }
-migrateLegacyStateKeys(state);
+if(migrateLegacyStateKeys(state))localStorage.setItem('cobblemon-livingdex-state',JSON.stringify(state));
 window.normalizeLivingDexStateKeys=(target)=>migrateLegacyStateKeys(target||{});
 function pokemonOwnedCount(id){return Math.max(0,Number(state[id]||0));}
 const favorites=JSON.parse(localStorage.getItem('cobblemon-livingdex-favorites')||'{}');
