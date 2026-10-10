@@ -49,7 +49,10 @@ Object.keys(state).forEach(k=>{const n=Number(state[k]);state[k]=Number.isFinite
 // Legacy bridge correction: Minior Red was once written with Yellow's dex id (10138).
 // Canonical LivingDex ids are Red=10136 and Yellow=10138.
 const LEGACY_STATE_KEY_ALIASES={
-  'minior-red|base|10138':'minior-red|base|10136'
+  'minior-red|base|10138':'minior-red|base|10136',
+  // Cobblemon uses species cobblemon:meowstic for both genders. Older bridge
+  // events may therefore arrive with the generic base ID; this catch is male.
+  'meowstic|base|678|main':'meowstic-male|base|678|main'
 };
 function migrateLegacyStateKeys(target){
   let changed=false;
