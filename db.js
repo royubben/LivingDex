@@ -535,7 +535,15 @@
       const trainerName=names.get(item.user_id);
       if(!trainerName)continue;
       const activity=Array.isArray(item.training?.__activity)?item.training.__activity:[];
-      for(const a of activity){if(a&&a.type&&!['team_add','team_remove'].includes(a.type))rows.push({...a,trainerName,activityUserId:item.user_id});}
+      for(const a of activity){
+        if(!a||!a.type||['team_add','team_remove'].includes(a.type))continue;
+        // Minecraft trade events store the partner's in-game username. Resolve the linked
+        // trainer's public display name for Feed text, using the stored name as fallback.
+        const tradePartnerName=a.type==='traded'&&a.tradePartnerId
+          ? (names.get(a.tradePartnerId)||a.tradePartnerName||'Unknown Trainer')
+          : a.tradePartnerName;
+        rows.push({...a,trainerName,tradePartnerName,activityUserId:item.user_id});
+      }
     }
     rows.sort((a,b)=>Number(b.ts||0)-Number(a.ts||0));
     globalActivityCache=rows.slice(0,100); globalActivityCacheAt=now;
