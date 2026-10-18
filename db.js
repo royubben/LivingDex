@@ -244,6 +244,9 @@
         return !q||hay.includes(q);
       });
       listEl.innerHTML=list.map(p=>{
+        if(p.server_only){
+          return `<article class="player-card player-card-v17 server-player-card"><div class="player-avatar">${esc((p.display_name||'T').slice(0,1).toUpperCase())}</div><div class="player-card-copy"><div class="player-card-name-row"><b>${esc(p.display_name||'Trainer')}</b><span>Server player</span></div><small>Not registered on LivingDex yet</small><div class="player-card-stats-mini"><span>◉ ${Number(p.server_caught||0)} caught</span><span>✨ ${Number(p.server_shinies||0)} shiny</span></div></div></article>`;
+        }
         const st=playerStatsMap.get(p.id)||{}, training=st.training||{}, ds=training.__daily||{}, keys=['who','type','evolution','pokedex','generation'];
         const totalQ=keys.reduce((n,k)=>n+Number(training[k]?.questions||0),0), totalC=keys.reduce((n,k)=>n+Number(training[k]?.correct||0),0);
         const badgeBase={caught:Object.values(st.state||{}).filter(Boolean).length,total:0,mainCaught:0,mainTotal:0,favoriteCount:Object.values(st.favorites||{}).filter(Boolean).length,fullBoxes:0,daily:{streak:Number(ds.streak||0),bestStreak:Number(ds.bestStreak||0)},training:{totalQuestions:totalQ,totalCorrect:totalC,bestScore:keys.reduce((m,k)=>Math.max(m,Number(training[k]?.best||0)),0),perfectModes:keys.filter(k=>Number(training[k]?.best||0)>=10).length,totalSessions:Number(training.__trainingSessions||Math.floor(totalQ/10)),perfectSessions:Number(training.__perfectSessions||0),fastAnswers:Number(training.__fastAnswers||0),modeSummary:Object.fromEntries(keys.map(k=>{const qq=Number(training[k]?.questions||0),cc=Number(training[k]?.correct||0);return[k,{questions:qq,correct:cc,accuracy:qq?Math.round(cc/qq*100):0,best:Number(training[k]?.best||0)}]}))}};
@@ -266,12 +269,21 @@
     });
     let playerSearchTimer=0;
     $('#playerSearch').oninput=()=>{clearTimeout(playerSearchTimer);playerSearchTimer=setTimeout(draw,120);};
-    const [profilesRes,statsRes]=await Promise.all([
+    const [profilesRes,statsRes,serverPlayersRes]=await Promise.all([
       client.from('profiles').select('id,display_name,dex_name,favorite_pokemon,favorite_type,favorite_region,favorite_generation,show_team').eq('show_profile',true).eq('show_in_players',true).limit(100),
-      client.from('player_public_stats').select('user_id,state,favorites,team,training').limit(100)
+      client.from('player_public_stats').select('user_id,state,favorites,team,training').limit(100),
+      client.rpc('public_minecraft_server_player_directory')
     ]);
     if(profilesRes.error||statsRes.error){listEl.innerHTML=`<div class="online-error">${esc((profilesRes.error||statsRes.error).message)}</div>`;return;}
-    playerProfiles=profilesRes.data||[];
+    const serverOnlyProfiles=(serverPlayersRes.data||[]).map(p=>({
+      id:`server:${p.minecraft_uuid}`,
+      display_name:p.minecraft_username||'Minecraft Player',
+      dex_name:'Server player',
+      server_only:true,
+      server_caught:Number(p.caught_count||0),
+      server_shinies:Number(p.shiny_count||0)
+    }));
+    playerProfiles=[...(profilesRes.data||[]),...serverOnlyProfiles];
     playerStatsMap=new Map((statsRes.data||[]).map(x=>[x.user_id,x]));
     draw();
   }
