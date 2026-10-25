@@ -131,6 +131,19 @@
       if(remoteSave){
         const remoteState=remoteSave.state||{},remoteTraining=remoteSave.training||{};
         const remoteCounts=remoteTraining.__pokemonCounts||{},remoteShinies=remoteTraining.__shinies||{};
+        // Lifetime catch counts are monotonic: a stale tab must never lower a
+        // count recorded by the Bridge or another device. Keep the highest
+        // valid numeric value per Pokémon across local and cloud snapshots.
+        const mergedCounts={...remoteCounts};
+        for(const [id,value] of Object.entries(payload.training.__pokemonCounts||{})){
+          const localCount=Number(value), remoteCount=Number(remoteCounts[id]??0);
+          if(Number.isFinite(localCount)&&localCount>=0){
+            mergedCounts[id]=Math.max(Number.isFinite(remoteCount)&&remoteCount>=0?remoteCount:0,localCount);
+          }else if(!Object.prototype.hasOwnProperty.call(mergedCounts,id)){
+            mergedCounts[id]=value;
+          }
+        }
+        payload.training.__pokemonCounts=mergedCounts;
         const localShinies={...(payload.training.__shinies||{})};
         const marker=localStorage.getItem('cobblemon-livingdex-last-server-state-sync')||'';
         const markerMs=marker?new Date(marker).getTime():0;
