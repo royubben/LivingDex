@@ -118,7 +118,57 @@
     const dirtyAt=localStorage.getItem('cobblemon-livingdex-local-dirty');
     const revisionAt=++syncRevision;
     try{
-      const payload=localPayload(),profile=profileLocal()||{},cloudTraining={...(payload.training||{}),__settings:payload.settings||{}},now=new Date().toISOString();
+      // Read the latest cloud snapshot before saving. Minecraft Bridge writes can
+      // arrive while this browser has unsynced local changes; a plain upsert of
+      // stale local state would otherwise erase those catches/evolutions.
+      const local=localPayload();
+      const payload={...local,state:{...(local.state||{})},training:{...(local.training||{})}};
+      payload.training.__pokemonCounts={...(local.training?.__pokemonCounts||{})};
+      const {data:remoteSave,error:remoteReadError}=await client.from('player_saves')
+        .select('state,training,updated_at').eq('user_id',currentUser.id).maybeSingle();
+      if(remoteReadError){console.warn('LivingDex cloud reconciliation failed',remoteReadError);return false;}
+      let reconciledRemoteTimestamp='';
+      if(remoteSave){
+        const remoteState=remoteSave.state||{},remoteTraining=remoteSave.training||{};
+        const remoteCounts=remoteTraining.__pokemonCounts||{},remoteShinies=remoteTraining.__shinies||{};
+        const localShinies={...(payload.training.__shinies||{})};
+        const marker=localStorage.getItem('cobblemon-livingdex-last-server-state-sync')||'';
+        const markerMs=marker?new Date(marker).getTime():0;
+        const remoteActivity=Array.isArray(remoteTraining.__activity)?remoteTraining.__activity:[];
+        const localActivity=Array.isArray(payload.training.__activity)?payload.training.__activity:[];
+        const localActivityIds=new Set(localActivity.map(a=>String(a?.id||'')));
+        // Reconcile only Bridge events this browser has not seen. An evolution
+        // touches both the previous and resulting entries, so the old form is
+        // removed as well as the new form being marked caught.
+        const unseenMinecraftActivity=remoteActivity.filter(a=>a?.minecraft&&(
+          Number(a?.ts||0)>markerMs || !localActivityIds.has(String(a?.id||''))
+        ));
+        const touchedEntries=new Set();
+        for(const activity of unseenMinecraftActivity){
+          if(activity?.entryId)touchedEntries.add(String(activity.entryId));
+          if(activity?.type==='evolved'&&activity?.sourceEntryId)touchedEntries.add(String(activity.sourceEntryId));
+        }
+        for(const id of touchedEntries){
+          if(Object.prototype.hasOwnProperty.call(remoteState,id))payload.state[id]=remoteState[id];
+          else delete payload.state[id];
+          if(Object.prototype.hasOwnProperty.call(remoteCounts,id))payload.training.__pokemonCounts[id]=remoteCounts[id];
+          else delete payload.training.__pokemonCounts[id];
+          if(Object.prototype.hasOwnProperty.call(remoteShinies,id))localShinies[id]=remoteShinies[id];
+          else delete localShinies[id];
+        }
+        payload.training.__shinies=localShinies;
+        // Preserve feed history and idempotency markers written by the Bridge,
+        // even if the open browser tab has an older local training snapshot.
+        const activityById=new Map();
+        for(const a of [...localActivity,...remoteActivity])if(a?.id)activityById.set(String(a.id),a);
+        payload.training.__activity=[...activityById.values()].sort((a,b)=>Number(b?.ts||0)-Number(a?.ts||0)).slice(0,1000);
+        payload.training.__minecraftEventIds={
+          ...(remoteTraining.__minecraftEventIds||{}),
+          ...(payload.training.__minecraftEventIds||{})
+        };
+        reconciledRemoteTimestamp=remoteSave.updated_at||'';
+      }
+      const profile=profileLocal()||{},cloudTraining={...(payload.training||{}),__settings:payload.settings||{}},now=new Date().toISOString();
       const {error:pe}=await client.from('profiles').upsert({id:currentUser.id,display_name:profile.trainerName||profile.display_name||'Trainer',dex_name:profile.assistantName||profile.dex_name||'Dex',favorite_pokemon:profile.favoritePokemon||null,favorite_type:profile.favoriteType||null,favorite_region:profile.favoriteRegion||null,favorite_generation:profile.favoriteGeneration?Number(profile.favoriteGeneration):null,bio:profile.bio||null,show_profile:profile.showProfile!==false,show_in_players:profile.showInPlayers!==false,show_on_leaderboard:profile.showOnLeaderboard!==false,show_team:profile.showTeam!==false,updated_at:now});
       if(pe){console.warn('LivingDex online profile save failed',pe);return false;}
       const {error:se}=await client.from('player_saves').upsert({user_id:currentUser.id,state:payload.state,favorites:payload.favorites,notes:payload.notes,team:payload.team,training:cloudTraining,updated_at:now});
@@ -126,6 +176,7 @@
       const dirtyNow=localStorage.getItem('cobblemon-livingdex-local-dirty');
       if(dirtyNow===dirtyAt && syncRevision===revisionAt){
         localStorage.removeItem('cobblemon-livingdex-local-dirty');
+        if(reconciledRemoteTimestamp)localStorage.setItem('cobblemon-livingdex-last-server-state-sync',reconciledRemoteTimestamp);
       }else{
         syncAgain=true;
       }
